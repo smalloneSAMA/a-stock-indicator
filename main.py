@@ -90,6 +90,16 @@ def main():
         action="store_true",
         help="Suppress non-error output.",
     )
+    parser.add_argument(
+        "--html-only",
+        action="store_true",
+        help="Only regenerate HTML pages from existing Excel data (no API calls).",
+    )
+    parser.add_argument(
+        "--no-html",
+        action="store_true",
+        help="Skip HTML page generation after computing.",
+    )
 
     args = parser.parse_args()
 
@@ -129,6 +139,25 @@ def main():
     # Parse date
     target_date = parse_date(args.date) if args.date else date.today()
 
+    # --html-only: skip computation, just regenerate HTML pages
+    if args.html_only:
+        from core import html_reporter
+        gen, fail = 0, 0
+        for name, cls in sorted(selected.items()):
+            try:
+                inst = cls()
+                out = html_reporter.generate_indicator_html(inst)
+                if out:
+                    logger.info(f"  ✓ HTML: {out}")
+                    gen += 1
+                else:
+                    logger.info(f"  - {name}: no data, HTML skipped")
+            except Exception as e:
+                logger.error(f"  ✗ {name} HTML: {e}")
+                fail += 1
+        logger.info(f"Done: {gen} HTML generated, {fail} failed.")
+        return
+
     # Run
     logger.info(f"Running {len(selected)} indicator(s) for {target_date}...")
     success = 0
@@ -148,6 +177,18 @@ def main():
             fail += 1
 
     logger.info(f"Done: {success} succeeded, {fail} failed, {len(selected) - success - fail} skipped.")
+
+    # Regenerate HTML pages from updated Excel data (unless --no-html)
+    if not args.no_html:
+        from core import html_reporter
+        for name, cls in sorted(selected.items()):
+            try:
+                inst = cls()
+                out = html_reporter.generate_indicator_html(inst)
+                if out:
+                    logger.info(f"  ✓ HTML updated: {out}")
+            except Exception as e:
+                logger.warning(f"HTML generation failed for {name}: {e}")
 
 
 if __name__ == "__main__":

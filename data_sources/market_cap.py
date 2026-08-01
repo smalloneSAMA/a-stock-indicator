@@ -324,6 +324,77 @@ def _find_nearest_trading_day(target_date: date, klines: dict[str, float]) -> tu
     return None, None
 
 
+# ── Historical real market-cap anchors (万亿, 沪深A股总市值) ───────
+# 来源：交易所官方统计/权威公开报道。
+# 作用：校正“指数缩放法”未考虑 IPO 扩容导致的系统性高估。
+#   在相邻锚点区间内，市值随上证综指点位线性插值。
+_MCAP_ANCHORS = [
+    ("2005-06-06", 3.2),    # 998点历史大底
+    ("2007-10-16", 36.0),   # 6124点历史大顶
+    ("2008-10-28", 11.0),   # 1664点
+    ("2009-12-31", 24.4),
+    ("2013-06-25", 18.9),   # 1849点
+    ("2014-12-31", 37.3),
+    ("2015-06-12", 71.0),   # 5178点
+    ("2016-12-30", 50.8),
+    ("2018-12-28", 43.4),
+    ("2019-01-04", 43.9),   # 2440点
+    ("2020-12-31", 79.7),
+    ("2021-12-31", 91.9),
+    ("2024-02-05", 75.0),   # 2635点
+    ("2024-10-08", 94.0),   # 3674点
+]
+
+
+def _estimate_historical_mcap(target_date: date, today_total: float,
+                              sse_klines: dict[str, float]) -> Optional[float]:
+    """
+    锚点插值法估算历史总市值（万亿）。
+
+    1. 用真实历史市值锚点 + 上证综指收盘点位构建锚点序列（含今日实时锚点）
+    2. 目标日期落在某锚点区间内 → 市值随指数点位线性插值
+    3. 早于首个锚点 → 用首个锚点按指数比例外推
+    """
+    today = date.today()
+
+    # 构建锚点序列: (date, mcap万亿, 上证收盘)
+    points: list[tuple[date, float, float]] = []
+    for ds, m in _MCAP_ANCHORS:
+        d = date.fromisoformat(ds)
+        _, idx = _find_nearest_trading_day(d, sse_klines)
+        if idx:
+            points.append((d, m, idx))
+
+    # 追加今日实时锚点
+    _, today_idx = _find_nearest_trading_day(today, sse_klines)
+    if today_idx:
+        points.append((today, today_total, today_idx))
+
+    points.sort()
+    if len(points) < 2:
+        return None
+
+    _, target_idx = _find_nearest_trading_day(target_date, sse_klines)
+    if target_idx is None:
+        return None
+
+    # 早于首个锚点 → 外推
+    if target_date < points[0][0]:
+        d0, m0, i0 = points[0]
+        return m0 * (target_idx / i0)
+
+    # 找到所在锚点区间 → 线性插值
+    for i in range(len(points) - 1):
+        d0, m0, i0 = points[i]
+        d1, m1, i1 = points[i + 1]
+        if d0 <= target_date <= d1:
+            if i1 == i0:
+                return m0
+            return m0 + (m1 - m0) * (target_idx - i0) / (i1 - i0)
+
+    return None
+
+
 # ── Main entry point ─────────────────────────────────────────────────
 
 def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
@@ -331,9 +402,9 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
     Fetch A-share total market cap (万亿 RMB) for a specific date.
 
     - If target_date is None or today, returns the real-time market cap.
-    - If target_date is a past date, estimates historical market cap by scaling
-      today's per-exchange market caps with index closing prices (index scaling
-      approximation — adequate for the Buffett Indicator).
+    - If target_date is a past date:
+        Tier 1: 锚点插值法（历史真实市值锚点 + 指数点位插值，校正IPO扩容）
+        Tier 2: 指数缩放法（旧方法，锚点数据缺失时兜底）
 
     Raises RuntimeError if all sources fail.
     """
@@ -349,8 +420,14 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
         logger.info(f"Total A-share market cap: {today_total:.4f}万亿 (today)")
         return today_total
 
-    # 2. Historical: scale each exchange by index closing price ratio
+    # 2. Historical — Tier 1: anchor interpolation (corrects IPO expansion)
     sse_klines = _fetch_index_klines("000001", "sh")
+    est = _estimate_historical_mcap(target_date, today_total, sse_klines)
+    if est is not None:
+        logger.info(f"Historical A-share mcap for {target_date}: {est:.4f}万亿 (anchor interpolation)")
+        return round(est, 4)
+
+    # 3. Historical — Tier 2: index scaling (old method, fallback)
     szse_klines = _fetch_index_klines("399106", "sz")
 
     _, today_sse_close = _find_nearest_trading_day(today, sse_klines)
@@ -358,13 +435,13 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
     _, today_szse_close = _find_nearest_trading_day(today, szse_klines)
     _, target_szse_close = _find_nearest_trading_day(target_date, szse_klines)
 
-    # If we can't get index data, fall back to today's value with a warning
+    # If we can't get index data, this is likely a non-trading day (holiday).
+    # Do NOT fabricate today's value for a historical date — skip instead.
     if not (today_sse_close and target_sse_close and today_szse_close and target_szse_close):
-        logger.warning(
-            f"Cannot compute historical market cap for {target_date} "
-            f"(missing index K-line data). Using today's value as estimate."
+        raise RuntimeError(
+            f"No index K-line data for {target_date} "
+            f"(likely non-trading day). Skipping."
         )
-        return today_total
 
     # Scale each exchange
     sse_mcap = exchange_mcaps.get("sse", 0)
@@ -377,7 +454,6 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
 
     logger.info(
         f"Historical A-share mcap for {target_date}: {historical_total:.4f}万亿 "
-        f"(SSE {target_sse_close:.0f}/{today_sse_close:.0f} × {sse_mcap/1e12:.2f}万亿 + "
-        f"SZSE {target_szse_close:.0f}/{today_szse_close:.0f} × {szse_mcap/1e12:.2f}万亿)"
+        f"(index scaling fallback)"
     )
     return historical_total

@@ -29,8 +29,13 @@ logger = logging.getLogger(__name__)
 # Source: National Bureau of Statistics official releases.
 # Update quarterly as new data is published (usually ~15 days after quarter end).
 _GDP_BASELINE = {
-    "_version": 3,
+    "_version": 5,
     "annual": {
+        2000: 10.03,
+        2001: 11.09,
+        2002: 12.17,
+        2003: 13.74,
+        2004: 15.99,
         2005: 18.73,
         2006: 21.94,
         2007: 27.01,
@@ -198,58 +203,89 @@ class GDPData:
         """Get quarterly GDP for a specific quarter."""
         return self.quarterly.get(f"{year}Q{quarter}")
 
+    @staticmethod
+    def _quarter_release_date(year: int, quarter: int) -> DateType:
+        """
+        季度GDP数据发布时间（point-in-time）：约季后17天由统计局发布。
+        Q4与次年1月中旬的全年初步核算一同发布。
+        """
+        if quarter == 4:
+            return DateType(year + 1, 1, 17)
+        return {
+            1: DateType(year, 4, 17),
+            2: DateType(year, 7, 17),
+            3: DateType(year, 10, 19),
+        }[quarter]
+
     def get_extrapolated_gdp(self, target_date: DateType) -> tuple[float, str]:
         """
-        Compute the best available GDP for the Buffett Indicator.
+        Compute the best GDP available *as of target_date* (point-in-time).
 
-        Extrapolation strategy (order of preference):
-          1. Current year annual GDP → use directly
-          2. Q1 + Q2 + Q3 → (Q1+Q2+Q3) / 3 * 4
-          3. Q1 + Q2        → (Q1+Q2) * 2
-          4. Q1              → Q1 * 4
-          5. Last year annual GDP → use as-is
+        Extrapolation strategy (order of preference, honoring release dates):
+          1. 当年已发布季度外推：Q1+Q2+Q3 → /3×4；Q1+Q2 → ×2；Q1 → ×4
+          2. 上年全年GDP（当年1月17日发布后）
+          3. 去年已发布季度外推（当年1月17日前，全年未发布时）
+          4. 更早年份全年GDP（按各自发布时间）
 
         Returns:
           (gdp_in_trillion_rmb, source_description)
         """
-        year = target_date.year
+        y = target_date.year
 
-        # 1. Current year annual GDP
-        annual = self.get_annual(year)
-        if annual is not None:
-            return annual, f"{year}年全年GDP"
-
-        # Collect available quarters for current year
-        qs = []
-        for q in range(1, 5):
-            val = self.get_quarterly(year, q)
-            if val is not None:
-                qs.append(val)
-            else:
-                break
-
-        # 2-4. Extrapolate from available quarters
-        if qs:
-            n = len(qs)
-            total_known = sum(qs)
+        def _extrapolate(qs: list[float], year: int) -> tuple[float, str] | None:
+            if not qs:
+                return None
+            n, total = len(qs), sum(qs)
             if n == 3:
-                gdp = round(total_known / 3 * 4, 2)
-                return gdp, f"{year}年前三季度GDP线性外推({total_known:.1f}/3×4)"
-            elif n == 2:
-                gdp = round(total_known * 2, 2)
-                return gdp, f"{year}年上半年GDP线性外推({total_known:.1f}×2)"
-            elif n == 1:
-                gdp = round(total_known * 4, 2)
-                return gdp, f"{year}年Q1 GDP线性外推({total_known:.1f}×4)"
+                return round(total / 3 * 4, 2), f"{year}年前三季度GDP线性外推({total:.1f}/3×4)"
+            if n == 2:
+                return round(total * 2, 2), f"{year}年上半年GDP线性外推({total:.1f}×2)"
+            return round(total * 4, 2), f"{year}年Q1 GDP线性外推({total:.1f}×4)"
 
-        # 5. Fall back through previous years' annual GDP (try up to 3 years back)
-        for offset in range(1, 4):
-            prev_year = year - offset
-            prev_annual = self.get_annual(prev_year)
-            if prev_annual is not None:
-                return prev_annual, f"无{year}年数据，使用{prev_year}年全年GDP"
+        # 1. 当年已发布季度外推
+        cur_qs = [
+            self.get_quarterly(y, q)
+            for q in (1, 2, 3)
+            if target_date >= self._quarter_release_date(y, q)
+        ]
+        cur_qs = [v for v in cur_qs if v is not None]
+        hit = _extrapolate(cur_qs, y)
+        if hit:
+            return hit
 
-        raise RuntimeError(f"No GDP data available for year {year} or any of the 3 prior years.")
+        # 2. 上年全年GDP（y年1月17日起可得）
+        if target_date >= DateType(y, 1, 17):
+            prev = self.get_annual(y - 1)
+            if prev is not None:
+                return prev, f"{y - 1}年全年GDP"
+
+        # 3. 去年已发布季度外推（当年1月17日前，去年全年尚未发布）
+        prev_qs = [
+            self.get_quarterly(y - 1, q)
+            for q in (1, 2, 3)
+            if target_date >= self._quarter_release_date(y - 1, q)
+        ]
+        prev_qs = [v for v in prev_qs if v is not None]
+        hit = _extrapolate(prev_qs, y - 1)
+        if hit:
+            return hit
+
+        # 4. 更早年份全年GDP（按发布时间过滤）
+        for offset in range(2, 6):
+            py = y - offset
+            val = self.get_annual(py)
+            if val is not None and target_date >= DateType(py + 1, 1, 17):
+                return val, f"{py}年全年GDP"
+
+        # 5. 极端兜底：数据缺口时用最早年度的全年GDP（并提示）
+        if self.annual:
+            oldest = min(self.annual)
+            logger.warning(
+                f"{target_date} 早于可用GDP发布日，使用{oldest}年全年GDP近似"
+            )
+            return self.annual[oldest], f"{oldest}年全年GDP(数据缺口近似)"
+
+        raise RuntimeError(f"No GDP data available for year {y} or prior.")
 
 
 # ── Convenience function ─────────────────────────────────────────────

@@ -23,6 +23,14 @@ class BuffettIndicator(BaseIndicator):
         return "A股证券化率"
 
     @property
+    def html_filename(self) -> str:
+        return "证券化率.html"
+
+    @property
+    def value_col(self) -> str:
+        return "证券化率(%)"
+
+    @property
     def columns(self) -> list[str]:
         return ["日期", "A股总市值(万亿)", "GDP(万亿)", "GDP来源", "证券化率(%)", "类型"]
 
