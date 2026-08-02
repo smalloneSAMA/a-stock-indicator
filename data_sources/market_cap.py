@@ -5,16 +5,18 @@ Data sources (multi-tier fallback):
   1. 腾讯财经 qt.gtimg.cn — 不封IP, scans multiple fields for per-exchange market cap
   2. Eastmoney push2 API — backup with rate limiting
 
-Historical market cap via index-scaling:
-  The real-time API only returns today's values. For historical dates, we scale
-  each exchange's today-market-cap by the ratio of its composite index closing
-  price on that date vs today.
-    historical_mcap = today_mcap × (index_close[date] / index_close[today])
+Historical market cap:
+  The real-time API only returns today's values. For historical dates we use
+  anchor interpolation: 14 hardcoded REAL market-cap anchors (exchange official
+  stats) + today's realtime anchor, interpolating between adjacent anchors with
+  a composite index (geometric mean of SSE & SZSE composite indexes, both
+  normalized to 1 at the anchor) — corrects the IPO-expansion bias that pure
+  index-scaling suffers from.
 """
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from core.data_fetcher import http_get
@@ -227,8 +229,7 @@ def _fetch_index_klines_tencent(index_code: str, prefix: str) -> dict[str, float
     dates = sorted(all_results.keys())
     for _ in range(2):  # up to 2 more batches
         earliest = dates[0]
-        from datetime import datetime as _dt, timedelta as _td
-        prev = (_dt.strptime(earliest, "%Y-%m-%d") - _td(days=1)).strftime("%Y-%m-%d")
+        prev = (datetime.strptime(earliest, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
         try:
             batch = _fetch_batch(prev)
             _extract(batch)
@@ -327,7 +328,7 @@ def _find_nearest_trading_day(target_date: date, klines: dict[str, float]) -> tu
 # ── Historical real market-cap anchors (万亿, 沪深A股总市值) ───────
 # 来源：交易所官方统计/权威公开报道。
 # 作用：校正“指数缩放法”未考虑 IPO 扩容导致的系统性高估。
-#   在相邻锚点区间内，市值随上证综指点位线性插值。
+#   在相邻锚点区间内，市值随沪深双指数合成（几何平均）线性插值。
 _MCAP_ANCHORS = [
     ("2005-06-06", 3.2),    # 998点历史大底
     ("2007-10-16", 36.0),   # 6124点历史大顶
@@ -343,54 +344,95 @@ _MCAP_ANCHORS = [
     ("2021-12-31", 91.9),
     ("2024-02-05", 75.0),   # 2635点
     ("2024-10-08", 94.0),   # 3674点
+    ("2025-12-31", 123.0),  # 官方统计：5469家上市公司总市值123万亿
+    ("2026-06-30", 119.07), # 官方统计：5535家上市公司总市值119.07万亿
 ]
 
 
+def _sanity_check(total_trillion: float,
+                 context: Optional[tuple[float, float]] = None) -> bool:
+    """
+    True if the value is plausible.
+
+    - context 为空（实时值 / 指数缩放）：固定范围 30~200万亿。
+    - context = 相邻锚点市值 (m0, m1)：动态范围 0.5×min ~ 1.8×max，
+      因为历史早期真实市值可以低至 3.2万亿（2005年），固定下限会误杀。
+    """
+    if context:
+        lo, hi = min(context), max(context)
+        return 0.5 * lo <= total_trillion <= 1.8 * hi
+    return _MIN_TOTAL_TRILLION <= total_trillion <= _MAX_TOTAL_TRILLION
+
+
+def _composite_index_ratio(sse: float, szse: float) -> float:
+    """
+    合成指数：上证综指与深证综指相对某一锚点的归一化涨跌的几何平均。
+    只用单一指数会引入结构偏差（如2015年深市涨幅远超沪市、2007年沪强深弱）；
+    几何平均对数量纲对称，两个指数在锚点处均归一化为1。
+    """
+    if sse > 0 and szse > 0:
+        return (sse * szse) ** 0.5
+    return sse if sse > 0 else szse  # 单指数兜底（K线缺失时退化为旧行为）
+
+
 def _estimate_historical_mcap(target_date: date, today_total: float,
-                              sse_klines: dict[str, float]) -> Optional[float]:
+                              sse_klines: dict[str, float],
+                              szse_klines: dict[str, float]) -> Optional[tuple[float, tuple[float, float]]]:
     """
     锚点插值法估算历史总市值（万亿）。
 
-    1. 用真实历史市值锚点 + 上证综指收盘点位构建锚点序列（含今日实时锚点）
-    2. 目标日期落在某锚点区间内 → 市值随指数点位线性插值
-    3. 早于首个锚点 → 用首个锚点按指数比例外推
+    1. 用真实历史市值锚点 + 上证/深证综指收盘点位构建锚点序列（含今日实时锚点），
+       每个锚点处两市指数均归一化为1
+    2. 目标日期落在某锚点区间内 → 市值随合成指数（两市归一化几何平均）线性插值；
+       允许目标日指数低于区间左锚点（如2024-10脉冲后回落）时 t<0 线性外推，
+       由上层动态 sanity 校验把异常值拦下
+    3. 早于首个锚点 → 用首个锚点按合成指数比例外推
+
+    返回 (估算值万亿, 相邻锚点市值区间) 或 None（K线缺失）。
     """
     today = date.today()
 
-    # 构建锚点序列: (date, mcap万亿, 上证收盘)
-    points: list[tuple[date, float, float]] = []
+    # 构建锚点序列: (date, mcap万亿, 上证收盘, 深证收盘)
+    points: list[tuple[date, float, float, float]] = []
     for ds, m in _MCAP_ANCHORS:
         d = date.fromisoformat(ds)
-        _, idx = _find_nearest_trading_day(d, sse_klines)
-        if idx:
-            points.append((d, m, idx))
+        _, sse_idx = _find_nearest_trading_day(d, sse_klines)
+        _, szse_idx = _find_nearest_trading_day(d, szse_klines)
+        if sse_idx:
+            points.append((d, m, sse_idx, szse_idx or 0.0))
 
     # 追加今日实时锚点
-    _, today_idx = _find_nearest_trading_day(today, sse_klines)
-    if today_idx:
-        points.append((today, today_total, today_idx))
+    _, today_sse = _find_nearest_trading_day(today, sse_klines)
+    _, today_szse = _find_nearest_trading_day(today, szse_klines)
+    if today_sse:
+        points.append((today, today_total, today_sse, today_szse or 0.0))
 
     points.sort()
     if len(points) < 2:
         return None
 
-    _, target_idx = _find_nearest_trading_day(target_date, sse_klines)
-    if target_idx is None:
+    _, target_sse = _find_nearest_trading_day(target_date, sse_klines)
+    if target_sse is None:
         return None
+    _, target_szse = _find_nearest_trading_day(target_date, szse_klines)
 
-    # 早于首个锚点 → 外推
+    # 早于首个锚点 → 外推（锚点处合成指数=1，目标日 = 相对锚点的合成涨跌）
     if target_date < points[0][0]:
-        d0, m0, i0 = points[0]
-        return m0 * (target_idx / i0)
+        d0, m0, i0, j0 = points[0]
+        r = _composite_index_ratio(target_sse / i0, (target_szse or 0) / j0 if j0 > 0 else 0)
+        return m0 * r, (m0, m0)
 
-    # 找到所在锚点区间 → 线性插值
+    # 找到所在锚点区间 → 用合成指数线性插值（允许 t 超出 [0,1] 外推）
     for i in range(len(points) - 1):
-        d0, m0, i0 = points[i]
-        d1, m1, i1 = points[i + 1]
+        d0, m0, i0, j0 = points[i]
+        d1, m1, i1, j1 = points[i + 1]
         if d0 <= target_date <= d1:
-            if i1 == i0:
-                return m0
-            return m0 + (m1 - m0) * (target_idx - i0) / (i1 - i0)
+            r_t = _composite_index_ratio(target_sse / i0, (target_szse or 0) / j0 if j0 > 0 else 0)
+            r_1 = _composite_index_ratio(i1 / i0, j1 / j0 if j0 > 0 and j1 > 0 else 0)
+            if r_1 <= 0:
+                return m0, (m0, m1)
+            t = (r_t - 1.0) / (r_1 - 1.0) if r_1 != 1.0 else 0.0
+            return m0 + (m1 - m0) * t, (m0, m1)
 
     return None
 
@@ -403,9 +445,12 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
 
     - If target_date is None or today, returns the real-time market cap.
     - If target_date is a past date:
-        Tier 1: 锚点插值法（历史真实市值锚点 + 指数点位插值，校正IPO扩容）
-        Tier 2: 指数缩放法（旧方法，锚点数据缺失时兜底）
+        Tier 1: 锚点插值法（历史真实市值锚点 + 沪深双指数合成插值，校正IPO扩容）
+        Tier 2: 指数缩放法（旧方法，锚点缺失/超界时兜底）
 
+    All results are sanity-checked (real-time: 30~200万亿; interpolation:
+    relative to neighbouring anchors); out-of-range values are rejected
+    rather than silently written.
     Raises RuntimeError if all sources fail.
     """
     target_date = target_date or date.today()
@@ -414,6 +459,11 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
     # 1. Get today's per-exchange market caps
     exchange_mcaps = _get_today_exchange_mcaps()
     today_total = round(sum(exchange_mcaps.values()) / 1e12, 4)
+    if not _sanity_check(today_total):
+        raise RuntimeError(
+            f"Realtime total market cap {today_total:.4f}万亿 is outside sane range "
+            f"{_MIN_TOTAL_TRILLION}~{_MAX_TOTAL_TRILLION} — refusing to use it."
+        )
 
     # If querying today, return directly
     if target_date == today:
@@ -422,14 +472,19 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
 
     # 2. Historical — Tier 1: anchor interpolation (corrects IPO expansion)
     sse_klines = _fetch_index_klines("000001", "sh")
-    est = _estimate_historical_mcap(target_date, today_total, sse_klines)
+    szse_klines = _fetch_index_klines("399106", "sz")
+    est = _estimate_historical_mcap(target_date, today_total, sse_klines, szse_klines)
     if est is not None:
-        logger.info(f"Historical A-share mcap for {target_date}: {est:.4f}万亿 (anchor interpolation)")
-        return round(est, 4)
+        value, context = est
+        if _sanity_check(value, context):
+            logger.info(f"Historical A-share mcap for {target_date}: {value:.4f}万亿 (anchor interpolation)")
+            return round(value, 4)
+        logger.warning(
+            f"Anchor interpolation for {target_date} gave {value:.4f}万亿 (out of sane "
+            f"range {0.5 * min(context):.1f}~{1.8 * max(context):.1f}) — falling back to index scaling"
+        )
 
     # 3. Historical — Tier 2: index scaling (old method, fallback)
-    szse_klines = _fetch_index_klines("399106", "sz")
-
     _, today_sse_close = _find_nearest_trading_day(today, sse_klines)
     _, target_sse_close = _find_nearest_trading_day(target_date, sse_klines)
     _, today_szse_close = _find_nearest_trading_day(today, szse_klines)
@@ -451,6 +506,11 @@ def fetch_total_market_cap(target_date: Optional[date] = None) -> float:
     sse_historical = sse_mcap * (target_sse_close / today_sse_close)
     szse_historical = szse_mcap * (target_szse_close / today_szse_close)
     historical_total = round((sse_historical + szse_historical + bse_mcap) / 1e12, 4)
+    if not _sanity_check(historical_total):
+        raise RuntimeError(
+            f"Index scaling for {target_date} gave {historical_total:.4f}万亿 — "
+            f"outside sane range {_MIN_TOTAL_TRILLION}~{_MAX_TOTAL_TRILLION}. Skipping."
+        )
 
     logger.info(
         f"Historical A-share mcap for {target_date}: {historical_total:.4f}万亿 "
