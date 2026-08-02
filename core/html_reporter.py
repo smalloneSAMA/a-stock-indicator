@@ -29,84 +29,238 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="A股证券化率（巴菲特指标）交互式可视化 — 牛熊信号检测与预测" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e13'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%233d8bfd' stroke-width='3'/%3E%3C/svg%3E" />
 <title>__TITLE__</title>
 __ECHARTS__
 <style>
+  :root {
+    --bg: #0a0e13;
+    --surface: #10161d;
+    --surface-2: #151d26;
+    --border: rgba(148, 172, 200, 0.13);
+    --border-strong: rgba(148, 172, 200, 0.26);
+    --text: #e6ebf2;
+    --text-2: #94a0af;
+    --text-3: #5d6875;
+    --accent: #3d8bfd;
+    --green: #2fbf71;
+    --red: #f0534c;
+    --glow-a: rgba(61, 139, 253, 0.08);
+    --glow-b: rgba(216, 166, 87, 0.05);
+    --header-bg: linear-gradient(180deg, rgba(24, 32, 42, 0.92), rgba(13, 18, 25, 0.92));
+    --tab-bg: rgba(10, 14, 19, 0.6);
+    --input-bg: #0c1219;
+    --dot-off: #232c38;
+    --dot-hover: #2d3947;
+    --hl: #5b9dff;
+    --hlr: #ff6b5e;
+    --hlg: #35d07a;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #222; }
-  .header { position: relative; background: #fff; padding: 14px 24px; border-bottom: 1px solid #e4e7ed; }
-  .header h1 { margin: 0; font-size: 20px; }
-  .stats { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 10px; }
-  .stat .label { font-size: 12px; color: #8a94a6; }
-  .stat .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
-  .stat .value small { font-size: 13px; font-weight: 400; color: #8a94a6; }
-  .range-box { min-width: 340px; }
-  .range-controls { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 4px; }
-  .range-controls input[type="date"] { height: 28px; font-size: 12px; padding: 0 6px; border: 1px solid #dcdfe6; border-radius: 5px; color: #444; background: #fafbfc; outline: none; }
-  .range-controls input[type="date"]:focus { border-color: #2f80ed; }
-  .range-controls .sep { color: #8a94a6; font-size: 13px; }
-  .btn-apply { height: 28px; padding: 0 16px; font-size: 12px; background: #2f80ed; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
-  .btn-apply:hover { background: #2468c7; }
-  .quick-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .quick-btns .qbtn { padding: 2px 12px; font-size: 12px; border: 1px solid #dcdfe6; border-radius: 12px; background: #fff; color: #555; cursor: pointer; }
-  .quick-btns .qbtn:hover { border-color: #2f80ed; color: #2f80ed; }
-  .quick-btns .qbtn.active { background: #2f80ed; color: #fff; border-color: #2f80ed; }
-  .tab-bar { position: absolute; top: 14px; right: 24px; display: flex; gap: 6px; }
-  .tab { padding: 6px 16px; border: 1px solid #dcdfe6; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; color: #555; }
-  .tab.active { background: #2f80ed; border-color: #2f80ed; color: #fff; }
-  .chart-wrap { margin: 16px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 8px; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(1100px 480px at 18% -8%, var(--glow-a), transparent 60%),
+      radial-gradient(800px 400px at 88% -6%, var(--glow-b), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  }
+  .page-wrap { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 0 20px 36px; }
+
+  /* ── Header ── */
+  .header {
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 12px; }
+  .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-dot {
+    width: 12px; height: 12px; border-radius: 4px;
+    background: linear-gradient(135deg, #57a1ff, #2c6fe0);
+    box-shadow: 0 0 14px rgba(61, 139, 253, 0.55);
+  }
+  .header h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .tab-bar { display: flex; gap: 4px; padding: 3px; background: var(--tab-bg); border: 1px solid var(--border); border-radius: 10px; }
+  .tab {
+    padding: 5px 16px; border: none; background: transparent; border-radius: 7px;
+    cursor: pointer; font-size: 13px; color: var(--text-2); transition: all 0.2s; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 10px rgba(61, 139, 253, 0.35); }
+  .stats {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 40px;
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(148, 172, 200, 0.12);
+  }
+  .stat .label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+  .stat .value {
+    font-family: var(--mono); font-size: 25px; font-weight: 600; margin-top: 3px;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--text);
+  }
+  .stat .value small { font-size: 12px; font-weight: 400; color: var(--text-3); font-family: inherit; }
+  .range-box { min-width: 360px; }
+  .range-controls { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 6px; }
+  .range-controls input[type="date"] {
+    height: 30px; font-size: 12px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); background: var(--input-bg); outline: none; transition: border-color 0.2s;
+  }
+  .range-controls input[type="date"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15); }
+  .range-controls .sep { color: var(--text-3); font-size: 13px; }
+  .btn-apply {
+    height: 30px; padding: 0 18px; font-size: 12px; font-weight: 500; font-family: inherit;
+    background: linear-gradient(180deg, #4a93ff, #2c6fe0); color: #fff; border: none; border-radius: 7px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-apply:hover { filter: brightness(1.1); box-shadow: 0 3px 12px rgba(61, 139, 253, 0.35); }
+  .btn-apply:active { transform: translateY(1px) scale(0.98); }
+  .quick-btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .quick-btns .qbtn {
+    padding: 3px 13px; font-size: 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--input-bg); color: var(--text-2); cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .quick-btns .qbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .quick-btns .qbtn.active { background: var(--accent); color: #fff; border-color: transparent; }
+
+  /* ── 图表卡片 ── */
+  .chart-wrap {
+    margin: 16px 0; background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  }
   #chart { width: 100%; height: 72vh; min-height: 420px; }
   #chart-analysis { width: 100%; height: 62vh; min-height: 400px; }
-  .legend { margin: 0 16px 16px; color: #8a94a6; font-size: 13px; line-height: 1.9; }
-  .legend b { color: #333; }
-  .acards { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 16px 0; }
-  .acard { flex: 1; min-width: 210px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .alabel { font-size: 12px; color: #8a94a6; }
-  .aval { font-size: 24px; font-weight: 700; margin-top: 4px; white-space: nowrap; }
-  .asub { font-size: 12px; color: #8a94a6; margin-top: 4px; }
-  .guide { margin: 16px 16px 0; background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); line-height: 1.9; font-size: 14px; }
-  .guide h3 { margin: 0 0 8px; font-size: 15px; }
-  .guide p { margin: 6px 0; color: #444; }
-  .guide .hl { color: #2f80ed; font-weight: 600; }
-  .guide .hlr { color: #e74c3c; font-weight: 600; }
-  .guide .hlg { color: #27ae60; font-weight: 600; }
-  /* 牛熊信号检测样式 */
+  .legend { margin: 0 4px 16px; color: var(--text-3); font-size: 12.5px; line-height: 2; }
+  .legend b { color: var(--text-2); font-weight: 600; }
+
+  /* ── 分析页卡片 ── */
+  .acards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+  .acard {
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: border-color 0.2s;
+  }
+  .acard:hover { border-color: var(--border-strong); }
+  .alabel { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+  .aval {
+    font-family: var(--mono); font-size: 26px; font-weight: 600; margin-top: 6px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .asub { font-size: 12px; color: var(--text-3); margin-top: 5px; }
+  .guide {
+    margin: 16px 0; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 22px; line-height: 1.9; font-size: 13.5px;
+  }
+  .guide h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+  .guide p { margin: 6px 0; color: var(--text-2); }
+  .guide .hl { color: var(--hl); font-weight: 600; }
+  .guide .hlr { color: var(--hlr); font-weight: 600; }
+  .guide .hlg { color: var(--hlg); font-weight: 600; }
+  .guide ul { color: var(--text-2); }
+
+  /* ── 牛熊信号 ── */
   .sig-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-  .sig-toolbar label { font-size: 13px; color: #555; }
-  .sig-toolbar input[type="date"] { height: 28px; font-size: 12px; padding: 0 6px; border: 1px solid #dcdfe6; border-radius: 5px; color: #444; background: #fafbfc; outline: none; }
-  .sig-toolbar input[type="date"]:focus { border-color: #2f80ed; }
-  .sig-banner { border-radius: 10px; padding: 12px 18px; font-size: 14px; margin: 6px 0 12px; line-height: 1.7; }
-  .sig-banner.strong-bot { background: linear-gradient(135deg, rgba(39,174,96,.16), rgba(39,174,96,.04)); border: 1px solid rgba(39,174,96,.45); }
-  .sig-banner.strong-top { background: linear-gradient(135deg, rgba(231,76,60,.16), rgba(231,76,60,.04)); border: 1px solid rgba(231,76,60,.45); }
-  .sig-banner.mid-bot { background: linear-gradient(135deg, rgba(39,174,96,.10), rgba(39,174,96,.02)); border: 1px solid rgba(39,174,96,.3); }
-  .sig-banner.mid-top { background: linear-gradient(135deg, rgba(231,76,60,.10), rgba(231,76,60,.02)); border: 1px solid rgba(231,76,60,.3); }
-  .sig-banner.none { background: #f7f8fa; border: 1px solid #e4e7ed; color: #666; }
+  .sig-toolbar label { font-size: 13px; color: var(--text-2); }
+  .sig-toolbar input[type="date"] {
+    height: 30px; font-size: 12px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); background: var(--input-bg); outline: none;
+  }
+  .sig-toolbar input[type="date"]:focus { border-color: var(--accent); }
+  .sig-banner { border-radius: 12px; padding: 13px 18px; font-size: 14px; margin: 6px 0 12px; line-height: 1.8; }
+  .sig-banner small { color: var(--text-2); }
+  .sig-banner.strong-bot { background: linear-gradient(135deg, rgba(47, 191, 113, 0.16), rgba(47, 191, 113, 0.03)); border: 1px solid rgba(47, 191, 113, 0.4); }
+  .sig-banner.strong-top { background: linear-gradient(135deg, rgba(240, 83, 76, 0.16), rgba(240, 83, 76, 0.03)); border: 1px solid rgba(240, 83, 76, 0.4); }
+  .sig-banner.mid-bot { background: linear-gradient(135deg, rgba(47, 191, 113, 0.10), rgba(47, 191, 113, 0.02)); border: 1px solid rgba(47, 191, 113, 0.28); }
+  .sig-banner.mid-top { background: linear-gradient(135deg, rgba(240, 83, 76, 0.10), rgba(240, 83, 76, 0.02)); border: 1px solid rgba(240, 83, 76, 0.28); }
+  .sig-banner.none { background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
   .sig-dots { display: inline-flex; gap: 5px; margin: 0 8px; vertical-align: middle; }
-  .sig-dots span { width: 14px; height: 14px; border-radius: 50%; background: #e4e7ed; display: inline-block; }
-  .sig-dots span.on { background: #2f80ed; }
-  .sig-dots span.on.bot { background: #27ae60; }
-  .sig-dots span.on.top { background: #e74c3c; }
+  .sig-dots span { width: 14px; height: 14px; border-radius: 50%; background: var(--dot-off); display: inline-block; }
+  .sig-dots span.on { background: var(--accent); }
+  .sig-dots span.on.bot { background: var(--green); }
+  .sig-dots span.on.top { background: var(--red); }
   .sig-cards { display: flex; gap: 10px; margin: 10px 0 4px; flex-wrap: wrap; }
-  .sig-card { flex: 1; min-width: 160px; background: #fafbfc; border: 1px solid #e4e7ed; border-radius: 10px; padding: 10px 12px; text-align: center; transition: all .15s; }
-  .sig-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-  .sig-card .w-name { font-size: 12px; color: #8a94a6; }
-  .sig-card .w-pos { font-size: 15px; font-weight: 700; margin: 5px 0 2px; }
-  .sig-card .w-pos.bot { color: #27ae60; }
-  .sig-card .w-pos.top { color: #e74c3c; }
-  .sig-card .w-pos.mid { color: #2f80ed; }
-  .sig-card .w-pct { font-size: 11px; color: #8a94a6; }
-  .sig-card .w-trend { font-size: 12px; margin-top: 5px; color: #555; }
-  .legend-bottom { margin-bottom: 20px; }
+  .sig-card {
+    flex: 1; min-width: 160px; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 11px; padding: 11px 13px; text-align: center; transition: all 0.2s;
+  }
+  .sig-card:hover { box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.6); border-color: var(--border-strong); transform: translateY(-1px); }
+  .sig-card .w-name { font-size: 12px; color: var(--text-3); }
+  .sig-card .w-pos { font-size: 15px; font-weight: 700; margin: 5px 0 2px; font-variant-numeric: tabular-nums; }
+  .sig-card .w-pos.bot { color: var(--green); }
+  .sig-card .w-pos.top { color: var(--red); }
+  .sig-card .w-pos.mid { color: var(--accent); }
+  .sig-card .w-pct { font-size: 11px; color: var(--text-3); }
+  .sig-card .w-trend { font-size: 12px; margin-top: 5px; color: var(--text-2); }
+  .sig-note { color: var(--text-3); font-size: 12.5px; }
+  .legend-bottom { margin-bottom: 24px; }
+
+  /* ── 交互通用 ── */
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: rgba(61, 139, 253, 0.35); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--dot-off); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dot-hover); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── 浅色主题 ── */
+  body[data-theme="light"] {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #f7f9fc;
+    --border: rgba(23, 45, 80, 0.10);
+    --border-strong: rgba(23, 45, 80, 0.20);
+    --text: #1a2332;
+    --text-2: #5a6b80;
+    --text-3: #8a99ad;
+    --accent: #2f6fe0;
+    --green: #1f9d57;
+    --red: #d9483f;
+    --glow-a: rgba(47, 111, 224, 0.06);
+    --glow-b: rgba(216, 166, 87, 0.08);
+    --header-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.96));
+    --tab-bg: rgba(23, 45, 80, 0.05);
+    --input-bg: #ffffff;
+    --dot-off: #dde4ee;
+    --dot-hover: #c9d3e0;
+    --hl: #2f6fe0;
+    --hlr: #d9483f;
+    --hlg: #1f9d57;
+  }
+  .theme-btn {
+    width: 34px; height: 30px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--input-bg); color: var(--text-2); font-size: 14px; cursor: pointer;
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .theme-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .theme-btn:active { transform: scale(0.96); }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>__TITLE__</h1>
-  <div class="tab-bar">
-    <button id="btn-chart" class="tab active">📈 图表</button>
-    <button id="btn-analysis" class="tab">📊 分析</button>
-  </div>
-  <div class="stats">
+<header class="header">
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="brand"><span class="brand-dot"></span><h1>__TITLE__</h1></div>
+      <div class="tab-bar">
+        <button id="btn-chart" class="tab active">📈 图表</button>
+        <button id="btn-analysis" class="tab">📊 分析</button>
+      </div>
+      <button id="btnTheme" class="theme-btn" title="切换深浅主题"></button>
+    </div>
+    <div class="stats">
     <div class="stat"><div class="label">最新值</div><div class="value" id="stLatest">--</div></div>
     <div class="stat range-box">
       <div class="label">可视范围（可直接选择）</div>
@@ -126,8 +280,10 @@ __ECHARTS__
     </div>
     <div class="stat"><div class="label">范围内最高</div><div class="value" id="stMax">--</div></div>
     <div class="stat"><div class="label">范围内最低</div><div class="value" id="stMin">--</div></div>
+    </div>
   </div>
-</div>
+</header>
+<div class="page-wrap">
 
 <!-- ============ 图表页 ============ -->
 <div id="page-chart">
@@ -177,6 +333,7 @@ __ECHARTS__
       5项条件满足越多信号越强。历史验证：2024-02-05（2635点底）触发5/5底部信号，2013-06-25（1849底）4/5，2015-06-12（5178顶）5/5，2021-02-18（3731顶）5/5；2016-01-27（熔断低点）与2024-10-08（924脉冲顶）均不触发（正确排除）。</p>
   </div>
 </div>
+</div><!-- /.page-wrap -->
 
 <script>
 const RAW = __DATA__;
@@ -209,6 +366,36 @@ function linearSlope(vals) {
   return den === 0 ? 0 : (n * sxy - sx * sy) / den;
 }
 
+// ---------- 主题系统（深浅两套，仅影响视觉） ----------
+const THEMES = {
+  dark: {
+    tooltipBg: 'rgba(13,18,24,.97)', tooltipBorder: 'rgba(148,172,200,.25)', tooltipText: '#e6ebf2',
+    axisLabel: '#94a0af', axisLine: 'rgba(148,172,200,.18)', splitLine: 'rgba(148,172,200,.08)',
+    legendText: '#94a0af', legendInactive: '#3c4754',
+    markLineColor: '#414d5c', markLineLabel: '#6b7686', markAreaLabel: '#6b7686',
+    markPointLabel: '#aab4c2',
+    dzBorder: '#26303c', dzFill: 'rgba(61,139,253,.16)', dzHandle: '#3d8bfd', dzText: '#8b95a5',
+    zoneColors: ['rgba(39,174,96,.17)', 'rgba(47,128,237,.13)', 'rgba(231,76,60,.17)'],
+    signalZoneColors: ['rgba(39,174,96,.22)', 'rgba(231,76,60,.22)'],
+    ratioAreaTop: 'rgba(47,128,237,.22)', mcapArea: 'rgba(242,153,74,.15)',
+  },
+  light: {
+    tooltipBg: 'rgba(255,255,255,.98)', tooltipBorder: '#e2e8f0', tooltipText: '#1a2332',
+    axisLabel: '#5a6b80', axisLine: 'rgba(20,40,70,.18)', splitLine: 'rgba(20,40,70,.07)',
+    legendText: '#5a6b80', legendInactive: '#b6c2d2',
+    markLineColor: '#b0bccb', markLineLabel: '#8a99ad', markAreaLabel: '#8a99ad',
+    markPointLabel: '#4a5a70',
+    dzBorder: '#d5dde8', dzFill: 'rgba(47,111,224,.14)', dzHandle: '#2f6fe0', dzText: '#5a6b80',
+    zoneColors: ['rgba(39,174,96,.10)', 'rgba(47,128,237,.06)', 'rgba(231,76,60,.10)'],
+    signalZoneColors: ['rgba(39,174,96,.14)', 'rgba(231,76,60,.14)'],
+    ratioAreaTop: 'rgba(47,128,237,.14)', mcapArea: 'rgba(242,153,74,.12)',
+  },
+};
+let initTheme = 'dark';
+try { initTheme = localStorage.getItem('buf_theme') || 'dark'; } catch (e) {}
+let TC = THEMES[initTheme] || THEMES.dark;
+document.body.dataset.theme = TC === THEMES.dark ? 'dark' : 'light';
+
 // ---------- 图表配置构建（两个页面共用同一套逻辑，功能一致） ----------
 const markPoints = RAW.filter(r => r.type).map(r => ({
   name: r.type,
@@ -219,7 +406,7 @@ const markPoints = RAW.filter(r => r.type).map(r => ({
     color: r.type.indexOf('牛') >= 0 ? '#e74c3c' : (r.type.indexOf('熊') >= 0 ? '#27ae60' : '#909399')
   },
   label: {
-    show: true, fontSize: 10, color: '#555',
+    show: true, fontSize: 10, color: TC.markPointLabel,
     formatter: p => (p.name || '').replace(/\\(.*\\)/, '')
   }
 }));
@@ -302,11 +489,11 @@ function computeZones(chart) {
 function zoneMarkArea(z) {
   return [
     [{ yAxis: z.bottom[0], name: '底部参考区 ' + z.bottom[0] + '~' + z.bottom[1] + '%' },
-     { yAxis: z.bottom[1], itemStyle: { color: 'rgba(39,174,96,.08)' } }],
+     { yAxis: z.bottom[1], itemStyle: { color: TC.zoneColors[0] } }],
     [{ yAxis: z.mid[0], name: '合理区 ' + z.mid[0] + '~' + z.mid[1] + '%' },
-     { yAxis: z.mid[1], itemStyle: { color: 'rgba(47,128,237,.05)' } }],
+     { yAxis: z.mid[1], itemStyle: { color: TC.zoneColors[1] } }],
     [{ yAxis: z.top[0], name: '顶部参考区 ' + z.top[0] + '~' + z.top[1] + '%' },
-     { yAxis: z.top[1], itemStyle: { color: 'rgba(231,76,60,.08)' } }]
+     { yAxis: z.top[1], itemStyle: { color: TC.zoneColors[2] } }]
   ];
 }
 
@@ -347,6 +534,41 @@ function mcapTrendFor(chart) {
   return out;
 }
 
+function themePatch() {
+  const patch = {
+    legend: { textStyle: { color: TC.legendText }, inactiveColor: TC.legendInactive },
+    tooltip: { backgroundColor: TC.tooltipBg, borderColor: TC.tooltipBorder, textStyle: { color: TC.tooltipText } },
+    xAxis: [{ axisLabel: { color: TC.axisLabel }, axisLine: { lineStyle: { color: TC.axisLine } } }],
+    yAxis: [{ axisLabel: { color: TC.axisLabel }, splitLine: { lineStyle: { color: TC.splitLine } } }],
+    dataZoom: [null, { borderColor: TC.dzBorder, fillerColor: TC.dzFill,
+      handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText } }],
+    series: [{ id: 'ratio', markPoint: { data: markPoints.map(p => ({ ...p, label: { ...p.label, color: TC.markPointLabel } })) } }]
+  };
+  return patch;
+}
+
+function applyTheme(t, save) {
+  TC = THEMES[t] || THEMES.dark;
+  const isDark = TC === THEMES.dark;
+  document.body.dataset.theme = isDark ? 'dark' : 'light';
+  document.getElementById('btnTheme').textContent = isDark ? '☀️' : '🌙';
+  if (save !== false) { try { localStorage.setItem('buf_theme', isDark ? 'dark' : 'light'); } catch (e) {} }
+  const patch = themePatch();
+  chart.setOption(patch);
+  if (analysisInited && analysisChart) analysisChart.setOption(patch);
+  computeSignalZones();  // 用当前主题色重算信号色带
+  const sz = { series: [{ id: 'signalZone', markArea: { data: signalZonesData } }] };
+  chart.setOption(sz);
+  if (analysisInited && analysisChart) analysisChart.setOption(sz);
+  refreshTrendFor(chart);
+  if (analysisInited) {
+    refreshTrendFor(analysisChart, { showDynamic: true, updateInfo: false,
+      yMinFloor: globalThis.analysisYMinFloor, yMaxCeil: globalThis.analysisYMaxCeil });
+  }
+}
+
+function toggleTheme() { applyTheme(TC === THEMES.dark ? 'light' : 'dark'); }
+
 function buildBaseOption(chart, opts) {
   opts = opts || {};
   const showDynamic = opts.showDynamic !== false;   // 动态三区（图表页默认开）
@@ -359,8 +581,8 @@ function buildBaseOption(chart, opts) {
   const yAxisArr = [{
     type: 'value', name: '证券化率 (%)', nameTextStyle: { color: '#8a94a6' },
     min: 0, max: 180,
-    axisLabel: { color: '#666', formatter: '{value}%' },
-    splitLine: { lineStyle: { color: '#f0f2f5' } }
+    axisLabel: { color: TC.axisLabel, formatter: '{value}%' },
+    splitLine: { lineStyle: { color: TC.splitLine } }
   }];
   if (HAS_MCAP) {
     yAxisArr.push({
@@ -383,17 +605,17 @@ function buildBaseOption(chart, opts) {
     lineStyle: { width: 2, color: '#2f80ed' },
     areaStyle: {
       color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [{ offset: 0, color: 'rgba(47,128,237,.18)' }, { offset: 1, color: 'rgba(47,128,237,0)' }] }
+        colorStops: [{ offset: 0, color: TC.ratioAreaTop }, { offset: 1, color: 'rgba(47,128,237,0)' }] }
     },
     markLine: {
       silent: true, symbol: 'none',
-      lineStyle: { color: '#c0c4cc', type: 'dashed' },
-      label: { color: '#909399', fontSize: 11, position: 'insideEndTop' },
+      lineStyle: { color: TC.markLineColor, type: 'dashed' },
+      label: { color: TC.markLineLabel, fontSize: 11, position: 'insideEndTop' },
       data: allLines
     },
     markArea: {
       silent: true,
-      label: { color: '#909399', fontSize: 10, position: 'insideTop' },
+      label: { color: TC.markAreaLabel, fontSize: 10, position: 'insideTop' },
       data: (showDynamic ? zoneMarkArea(initZones) : []).concat(extraAreas)
     },
     markPoint: { data: markPoints.concat(predictMark) }
@@ -405,7 +627,7 @@ function buildBaseOption(chart, opts) {
       data: RAW.map(r => r.mcap),
       showSymbol: false, smooth: true, connectNulls: true, z: 1, silent: true,
       lineStyle: { width: 1.5, color: '#f2994a' },
-      areaStyle: { color: 'rgba(242,153,74,.10)' }
+      areaStyle: { color: TC.mcapArea }
     });
     seriesArr.push({
       id: 'mcapTrend',
@@ -446,15 +668,15 @@ function buildBaseOption(chart, opts) {
       selected: HAS_MCAP
         ? { '证券化率': true, '总市值(万亿)': false, '趋势线': true, '市值趋势线': false, '牛熊信号区间': false }
         : { '证券化率': true, '趋势线': true, '牛熊信号区间': false },
-      textStyle: { color: '#666', fontSize: 12 },
-      inactiveColor: '#c0c4cc',
+      textStyle: { color: TC.legendText, fontSize: 12 },
+      inactiveColor: TC.legendInactive,
       itemWidth: 18, itemHeight: 10
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255,255,255,.97)',
-      borderColor: '#e4e7ed',
-      textStyle: { color: '#333' },
+      backgroundColor: TC.tooltipBg,
+      borderColor: TC.tooltipBorder,
+      textStyle: { color: TC.tooltipText },
       formatter: ps => {
         const r = RAW[ps[0].dataIndex];
         let html = '<b>' + r.date + '</b><br>';
@@ -474,15 +696,15 @@ function buildBaseOption(chart, opts) {
     grid: { left: 66, right: 66, top: 62, bottom: 66 },
     xAxis: {
       type: 'category', data: RAW.map(r => r.date), boundaryGap: false,
-      axisLabel: { color: '#666', fontSize: 11 },
-      axisLine: { lineStyle: { color: '#dcdfe6' } }
+      axisLabel: { color: TC.axisLabel, fontSize: 11 },
+      axisLine: { lineStyle: { color: TC.axisLine } }
     },
     yAxis: [{ ...yAxisArr[0], min: yMin, max: yMax }].concat(yAxisArr.slice(1)),
     dataZoom: [
       { type: 'inside', start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: false },
       { type: 'slider', start: 0, end: 100, height: 22, bottom: 14,
-        borderColor: '#dcdfe6', fillerColor: 'rgba(47,128,237,.12)',
-        handleStyle: { color: '#2f80ed' }, textStyle: { color: '#666', fontSize: 11 } }
+        borderColor: TC.dzBorder, fillerColor: TC.dzFill,
+        handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText, fontSize: 11 } }
     ],
     series: seriesArr
   };
@@ -876,7 +1098,7 @@ function fillAnalysis(fc) {
 
   // 预测逻辑说明
   html += '<p><b>📐 预测逻辑说明</b>（为什么这样划分顶部/底部区域）：</p>';
-  html += '<ul style="margin:4px 0 4px 20px;padding:0;color:#444;font-size:13px;line-height:2">';
+  html += '<ul style="margin:4px 0 4px 20px;padding:0;color:var(--text-2);font-size:13px;line-height:2">';
   html += '<li><b>转折点自动检测（Zigzag）</b>：对全部 ' + N + ' 个数据点扫描，证券化率从峰回落或从谷回升 <b>超过15个百分点</b> 才确认一个转折点，自动识别出 <b>' +
     (peaks.length + troughs.length) + ' 个</b>大周期牛熊转折（' + peaks.length + '峰/' + troughs.length + '谷），不依赖人工标注。波动不足15个百分点的次级震荡被忽略。</li>';
   html += '<li><b>与图表页动态三区的区别</b>：图表页的估值区域是对<b>可视范围内全部数据</b>做对数正态 μ±1σ 划分（随缩放变化，回答"现在处于所选范围的什么相对位置"）；本页预测区是对<b>全历史牛熊转折点</b>做分位统计（固定不变，回答"未来顶/底目标在哪"）。两者方法不同但互补——动态三区看"相对位置"，预测区看"绝对目标"。</li>';
@@ -937,13 +1159,13 @@ function computeSignalZones() {
   for (const [s, e] of merge(botRuns)) {
     signalZonesData.push([
       { xAxis: RAW[s].date, name: '熊市底部信号区 ' + RAW[s].date + '~' + RAW[e].date },
-      { xAxis: RAW[e].date, itemStyle: { color: 'rgba(39,174,96,.13)' } }
+      { xAxis: RAW[e].date, itemStyle: { color: TC.signalZoneColors[0] } }
     ]);
   }
   for (const [s, e] of merge(topRuns)) {
     signalZonesData.push([
       { xAxis: RAW[s].date, name: '牛市顶部信号区 ' + RAW[s].date + '~' + RAW[e].date },
-      { xAxis: RAW[e].date, itemStyle: { color: 'rgba(231,76,60,.13)' } }
+      { xAxis: RAW[e].date, itemStyle: { color: TC.signalZoneColors[1] } }
     ]);
   }
 }
@@ -1083,6 +1305,10 @@ function renderSignal(targetIdx) {
 
 // 默认：检测最新日期（当前时点）——renderSignal 内部会生成控件并绑定事件
 renderSignal(N - 1);
+
+// ---------- 主题初始化 ----------
+document.getElementById('btnTheme').onclick = toggleTheme;
+applyTheme(initTheme, false);
 
 // 初始化可视范围输入框为全范围（此时所有变量已就绪）
 quickAll();

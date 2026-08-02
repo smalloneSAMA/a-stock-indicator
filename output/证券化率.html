@@ -3,86 +3,240 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="A股证券化率（巴菲特指标）交互式可视化 — 牛熊信号检测与预测" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e13'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%233d8bfd' stroke-width='3'/%3E%3C/svg%3E" />
 <title>A股证券化率</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script>window.echarts||document.write('<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"><\/script>');</script>
 <script>window.echarts||document.write('<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"><\/script>');</script>
 <style>
+  :root {
+    --bg: #0a0e13;
+    --surface: #10161d;
+    --surface-2: #151d26;
+    --border: rgba(148, 172, 200, 0.13);
+    --border-strong: rgba(148, 172, 200, 0.26);
+    --text: #e6ebf2;
+    --text-2: #94a0af;
+    --text-3: #5d6875;
+    --accent: #3d8bfd;
+    --green: #2fbf71;
+    --red: #f0534c;
+    --glow-a: rgba(61, 139, 253, 0.08);
+    --glow-b: rgba(216, 166, 87, 0.05);
+    --header-bg: linear-gradient(180deg, rgba(24, 32, 42, 0.92), rgba(13, 18, 25, 0.92));
+    --tab-bg: rgba(10, 14, 19, 0.6);
+    --input-bg: #0c1219;
+    --dot-off: #232c38;
+    --dot-hover: #2d3947;
+    --hl: #5b9dff;
+    --hlr: #ff6b5e;
+    --hlg: #35d07a;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #222; }
-  .header { position: relative; background: #fff; padding: 14px 24px; border-bottom: 1px solid #e4e7ed; }
-  .header h1 { margin: 0; font-size: 20px; }
-  .stats { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 10px; }
-  .stat .label { font-size: 12px; color: #8a94a6; }
-  .stat .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
-  .stat .value small { font-size: 13px; font-weight: 400; color: #8a94a6; }
-  .range-box { min-width: 340px; }
-  .range-controls { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 4px; }
-  .range-controls input[type="date"] { height: 28px; font-size: 12px; padding: 0 6px; border: 1px solid #dcdfe6; border-radius: 5px; color: #444; background: #fafbfc; outline: none; }
-  .range-controls input[type="date"]:focus { border-color: #2f80ed; }
-  .range-controls .sep { color: #8a94a6; font-size: 13px; }
-  .btn-apply { height: 28px; padding: 0 16px; font-size: 12px; background: #2f80ed; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
-  .btn-apply:hover { background: #2468c7; }
-  .quick-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .quick-btns .qbtn { padding: 2px 12px; font-size: 12px; border: 1px solid #dcdfe6; border-radius: 12px; background: #fff; color: #555; cursor: pointer; }
-  .quick-btns .qbtn:hover { border-color: #2f80ed; color: #2f80ed; }
-  .quick-btns .qbtn.active { background: #2f80ed; color: #fff; border-color: #2f80ed; }
-  .tab-bar { position: absolute; top: 14px; right: 24px; display: flex; gap: 6px; }
-  .tab { padding: 6px 16px; border: 1px solid #dcdfe6; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; color: #555; }
-  .tab.active { background: #2f80ed; border-color: #2f80ed; color: #fff; }
-  .chart-wrap { margin: 16px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 8px; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(1100px 480px at 18% -8%, var(--glow-a), transparent 60%),
+      radial-gradient(800px 400px at 88% -6%, var(--glow-b), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  }
+  .page-wrap { position: relative; z-index: 1; max-width: 1440px; margin: 0 auto; padding: 0 20px 36px; }
+
+  /* ── Header ── */
+  .header {
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 12px; }
+  .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-dot {
+    width: 12px; height: 12px; border-radius: 4px;
+    background: linear-gradient(135deg, #57a1ff, #2c6fe0);
+    box-shadow: 0 0 14px rgba(61, 139, 253, 0.55);
+  }
+  .header h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .tab-bar { display: flex; gap: 4px; padding: 3px; background: var(--tab-bg); border: 1px solid var(--border); border-radius: 10px; }
+  .tab {
+    padding: 5px 16px; border: none; background: transparent; border-radius: 7px;
+    cursor: pointer; font-size: 13px; color: var(--text-2); transition: all 0.2s; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 10px rgba(61, 139, 253, 0.35); }
+  .stats {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 40px;
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(148, 172, 200, 0.12);
+  }
+  .stat .label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+  .stat .value {
+    font-family: var(--mono); font-size: 25px; font-weight: 600; margin-top: 3px;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--text);
+  }
+  .stat .value small { font-size: 12px; font-weight: 400; color: var(--text-3); font-family: inherit; }
+  .range-box { min-width: 360px; }
+  .range-controls { display: flex; align-items: center; gap: 6px; font-weight: 400; margin-top: 6px; }
+  .range-controls input[type="date"] {
+    height: 30px; font-size: 12px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); background: var(--input-bg); outline: none; transition: border-color 0.2s;
+  }
+  .range-controls input[type="date"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15); }
+  .range-controls .sep { color: var(--text-3); font-size: 13px; }
+  .btn-apply {
+    height: 30px; padding: 0 18px; font-size: 12px; font-weight: 500; font-family: inherit;
+    background: linear-gradient(180deg, #4a93ff, #2c6fe0); color: #fff; border: none; border-radius: 7px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-apply:hover { filter: brightness(1.1); box-shadow: 0 3px 12px rgba(61, 139, 253, 0.35); }
+  .btn-apply:active { transform: translateY(1px) scale(0.98); }
+  .quick-btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .quick-btns .qbtn {
+    padding: 3px 13px; font-size: 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--input-bg); color: var(--text-2); cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .quick-btns .qbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .quick-btns .qbtn.active { background: var(--accent); color: #fff; border-color: transparent; }
+
+  /* ── 图表卡片 ── */
+  .chart-wrap {
+    margin: 16px 0; background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  }
   #chart { width: 100%; height: 72vh; min-height: 420px; }
   #chart-analysis { width: 100%; height: 62vh; min-height: 400px; }
-  .legend { margin: 0 16px 16px; color: #8a94a6; font-size: 13px; line-height: 1.9; }
-  .legend b { color: #333; }
-  .acards { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 16px 0; }
-  .acard { flex: 1; min-width: 210px; background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .alabel { font-size: 12px; color: #8a94a6; }
-  .aval { font-size: 24px; font-weight: 700; margin-top: 4px; white-space: nowrap; }
-  .asub { font-size: 12px; color: #8a94a6; margin-top: 4px; }
-  .guide { margin: 16px 16px 0; background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); line-height: 1.9; font-size: 14px; }
-  .guide h3 { margin: 0 0 8px; font-size: 15px; }
-  .guide p { margin: 6px 0; color: #444; }
-  .guide .hl { color: #2f80ed; font-weight: 600; }
-  .guide .hlr { color: #e74c3c; font-weight: 600; }
-  .guide .hlg { color: #27ae60; font-weight: 600; }
-  /* 牛熊信号检测样式 */
+  .legend { margin: 0 4px 16px; color: var(--text-3); font-size: 12.5px; line-height: 2; }
+  .legend b { color: var(--text-2); font-weight: 600; }
+
+  /* ── 分析页卡片 ── */
+  .acards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+  .acard {
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: border-color 0.2s;
+  }
+  .acard:hover { border-color: var(--border-strong); }
+  .alabel { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+  .aval {
+    font-family: var(--mono); font-size: 26px; font-weight: 600; margin-top: 6px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .asub { font-size: 12px; color: var(--text-3); margin-top: 5px; }
+  .guide {
+    margin: 16px 0; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 22px; line-height: 1.9; font-size: 13.5px;
+  }
+  .guide h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+  .guide p { margin: 6px 0; color: var(--text-2); }
+  .guide .hl { color: var(--hl); font-weight: 600; }
+  .guide .hlr { color: var(--hlr); font-weight: 600; }
+  .guide .hlg { color: var(--hlg); font-weight: 600; }
+  .guide ul { color: var(--text-2); }
+
+  /* ── 牛熊信号 ── */
   .sig-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-  .sig-toolbar label { font-size: 13px; color: #555; }
-  .sig-toolbar input[type="date"] { height: 28px; font-size: 12px; padding: 0 6px; border: 1px solid #dcdfe6; border-radius: 5px; color: #444; background: #fafbfc; outline: none; }
-  .sig-toolbar input[type="date"]:focus { border-color: #2f80ed; }
-  .sig-banner { border-radius: 10px; padding: 12px 18px; font-size: 14px; margin: 6px 0 12px; line-height: 1.7; }
-  .sig-banner.strong-bot { background: linear-gradient(135deg, rgba(39,174,96,.16), rgba(39,174,96,.04)); border: 1px solid rgba(39,174,96,.45); }
-  .sig-banner.strong-top { background: linear-gradient(135deg, rgba(231,76,60,.16), rgba(231,76,60,.04)); border: 1px solid rgba(231,76,60,.45); }
-  .sig-banner.mid-bot { background: linear-gradient(135deg, rgba(39,174,96,.10), rgba(39,174,96,.02)); border: 1px solid rgba(39,174,96,.3); }
-  .sig-banner.mid-top { background: linear-gradient(135deg, rgba(231,76,60,.10), rgba(231,76,60,.02)); border: 1px solid rgba(231,76,60,.3); }
-  .sig-banner.none { background: #f7f8fa; border: 1px solid #e4e7ed; color: #666; }
+  .sig-toolbar label { font-size: 13px; color: var(--text-2); }
+  .sig-toolbar input[type="date"] {
+    height: 30px; font-size: 12px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); background: var(--input-bg); outline: none;
+  }
+  .sig-toolbar input[type="date"]:focus { border-color: var(--accent); }
+  .sig-banner { border-radius: 12px; padding: 13px 18px; font-size: 14px; margin: 6px 0 12px; line-height: 1.8; }
+  .sig-banner small { color: var(--text-2); }
+  .sig-banner.strong-bot { background: linear-gradient(135deg, rgba(47, 191, 113, 0.16), rgba(47, 191, 113, 0.03)); border: 1px solid rgba(47, 191, 113, 0.4); }
+  .sig-banner.strong-top { background: linear-gradient(135deg, rgba(240, 83, 76, 0.16), rgba(240, 83, 76, 0.03)); border: 1px solid rgba(240, 83, 76, 0.4); }
+  .sig-banner.mid-bot { background: linear-gradient(135deg, rgba(47, 191, 113, 0.10), rgba(47, 191, 113, 0.02)); border: 1px solid rgba(47, 191, 113, 0.28); }
+  .sig-banner.mid-top { background: linear-gradient(135deg, rgba(240, 83, 76, 0.10), rgba(240, 83, 76, 0.02)); border: 1px solid rgba(240, 83, 76, 0.28); }
+  .sig-banner.none { background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
   .sig-dots { display: inline-flex; gap: 5px; margin: 0 8px; vertical-align: middle; }
-  .sig-dots span { width: 14px; height: 14px; border-radius: 50%; background: #e4e7ed; display: inline-block; }
-  .sig-dots span.on { background: #2f80ed; }
-  .sig-dots span.on.bot { background: #27ae60; }
-  .sig-dots span.on.top { background: #e74c3c; }
+  .sig-dots span { width: 14px; height: 14px; border-radius: 50%; background: var(--dot-off); display: inline-block; }
+  .sig-dots span.on { background: var(--accent); }
+  .sig-dots span.on.bot { background: var(--green); }
+  .sig-dots span.on.top { background: var(--red); }
   .sig-cards { display: flex; gap: 10px; margin: 10px 0 4px; flex-wrap: wrap; }
-  .sig-card { flex: 1; min-width: 160px; background: #fafbfc; border: 1px solid #e4e7ed; border-radius: 10px; padding: 10px 12px; text-align: center; transition: all .15s; }
-  .sig-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-  .sig-card .w-name { font-size: 12px; color: #8a94a6; }
-  .sig-card .w-pos { font-size: 15px; font-weight: 700; margin: 5px 0 2px; }
-  .sig-card .w-pos.bot { color: #27ae60; }
-  .sig-card .w-pos.top { color: #e74c3c; }
-  .sig-card .w-pos.mid { color: #2f80ed; }
-  .sig-card .w-pct { font-size: 11px; color: #8a94a6; }
-  .sig-card .w-trend { font-size: 12px; margin-top: 5px; color: #555; }
-  .legend-bottom { margin-bottom: 20px; }
+  .sig-card {
+    flex: 1; min-width: 160px; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 11px; padding: 11px 13px; text-align: center; transition: all 0.2s;
+  }
+  .sig-card:hover { box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.6); border-color: var(--border-strong); transform: translateY(-1px); }
+  .sig-card .w-name { font-size: 12px; color: var(--text-3); }
+  .sig-card .w-pos { font-size: 15px; font-weight: 700; margin: 5px 0 2px; font-variant-numeric: tabular-nums; }
+  .sig-card .w-pos.bot { color: var(--green); }
+  .sig-card .w-pos.top { color: var(--red); }
+  .sig-card .w-pos.mid { color: var(--accent); }
+  .sig-card .w-pct { font-size: 11px; color: var(--text-3); }
+  .sig-card .w-trend { font-size: 12px; margin-top: 5px; color: var(--text-2); }
+  .sig-note { color: var(--text-3); font-size: 12.5px; }
+  .legend-bottom { margin-bottom: 24px; }
+
+  /* ── 交互通用 ── */
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: rgba(61, 139, 253, 0.35); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--dot-off); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dot-hover); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── 浅色主题 ── */
+  body[data-theme="light"] {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface-2: #f7f9fc;
+    --border: rgba(23, 45, 80, 0.10);
+    --border-strong: rgba(23, 45, 80, 0.20);
+    --text: #1a2332;
+    --text-2: #5a6b80;
+    --text-3: #8a99ad;
+    --accent: #2f6fe0;
+    --green: #1f9d57;
+    --red: #d9483f;
+    --glow-a: rgba(47, 111, 224, 0.06);
+    --glow-b: rgba(216, 166, 87, 0.08);
+    --header-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.96));
+    --tab-bg: rgba(23, 45, 80, 0.05);
+    --input-bg: #ffffff;
+    --dot-off: #dde4ee;
+    --dot-hover: #c9d3e0;
+    --hl: #2f6fe0;
+    --hlr: #d9483f;
+    --hlg: #1f9d57;
+  }
+  .theme-btn {
+    width: 34px; height: 30px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--input-bg); color: var(--text-2); font-size: 14px; cursor: pointer;
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .theme-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .theme-btn:active { transform: scale(0.96); }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>A股证券化率</h1>
-  <div class="tab-bar">
-    <button id="btn-chart" class="tab active">📈 图表</button>
-    <button id="btn-analysis" class="tab">📊 分析</button>
-  </div>
-  <div class="stats">
+<header class="header">
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="brand"><span class="brand-dot"></span><h1>A股证券化率</h1></div>
+      <div class="tab-bar">
+        <button id="btn-chart" class="tab active">📈 图表</button>
+        <button id="btn-analysis" class="tab">📊 分析</button>
+      </div>
+      <button id="btnTheme" class="theme-btn" title="切换深浅主题"></button>
+    </div>
+    <div class="stats">
     <div class="stat"><div class="label">最新值</div><div class="value" id="stLatest">--</div></div>
     <div class="stat range-box">
       <div class="label">可视范围（可直接选择）</div>
@@ -102,8 +256,10 @@
     </div>
     <div class="stat"><div class="label">范围内最高</div><div class="value" id="stMax">--</div></div>
     <div class="stat"><div class="label">范围内最低</div><div class="value" id="stMin">--</div></div>
+    </div>
   </div>
-</div>
+</header>
+<div class="page-wrap">
 
 <!-- ============ 图表页 ============ -->
 <div id="page-chart">
@@ -153,6 +309,7 @@
       5项条件满足越多信号越强。历史验证：2024-02-05（2635点底）触发5/5底部信号，2013-06-25（1849底）4/5，2015-06-12（5178顶）5/5，2021-02-18（3731顶）5/5；2016-01-27（熔断低点）与2024-10-08（924脉冲顶）均不触发（正确排除）。</p>
   </div>
 </div>
+</div><!-- /.page-wrap -->
 
 <script>
 const RAW = [{"date": "2005-01-01", "value": 28.52, "type": "", "extra": {"A股总市值(万亿)": 3.92, "GDP(万亿)": 13.74}, "mcap": 3.92}, {"date": "2005-01-16", "value": 28.05, "type": "", "extra": {"A股总市值(万亿)": 3.85, "GDP(万亿)": 13.74}, "mcap": 3.85}, {"date": "2005-01-31", "value": 23.06, "type": "", "extra": {"A股总市值(万亿)": 3.69, "GDP(万亿)": 15.99}, "mcap": 3.69}, {"date": "2005-03-02", "value": 24.91, "type": "", "extra": {"A股总市值(万亿)": 3.98, "GDP(万亿)": 15.99}, "mcap": 3.98}, {"date": "2005-03-17", "value": 24.06, "type": "", "extra": {"A股总市值(万亿)": 3.85, "GDP(万亿)": 15.99}, "mcap": 3.85}, {"date": "2005-04-01", "value": 23.67, "type": "", "extra": {"A股总市值(万亿)": 3.79, "GDP(万亿)": 15.99}, "mcap": 3.79}, {"date": "2005-04-16", "value": 23.54, "type": "", "extra": {"A股总市值(万亿)": 3.76, "GDP(万亿)": 15.99}, "mcap": 3.76}, {"date": "2005-05-01", "value": 22.43, "type": "", "extra": {"A股总市值(万亿)": 3.59, "GDP(万亿)": 15.99}, "mcap": 3.59}, {"date": "2005-05-16", "value": 21.19, "type": "", "extra": {"A股总市值(万亿)": 3.39, "GDP(万亿)": 15.99}, "mcap": 3.39}, {"date": "2005-05-31", "value": 20.52, "type": "", "extra": {"A股总市值(万亿)": 3.28, "GDP(万亿)": 15.99}, "mcap": 3.28}, {"date": "2005-06-15", "value": 21.57, "type": "", "extra": {"A股总市值(万亿)": 3.45, "GDP(万亿)": 15.99}, "mcap": 3.45}, {"date": "2005-06-30", "value": 21.9, "type": "", "extra": {"A股总市值(万亿)": 3.5, "GDP(万亿)": 15.99}, "mcap": 3.5}, {"date": "2005-07-15", "value": 19.68, "type": "", "extra": {"A股总市值(万亿)": 3.15, "GDP(万亿)": 15.99}, "mcap": 3.15}, {"date": "2005-07-30", "value": 21.99, "type": "", "extra": {"A股总市值(万亿)": 3.52, "GDP(万亿)": 15.99}, "mcap": 3.52}, {"date": "2005-08-14", "value": 25.43, "type": "", "extra": {"A股总市值(万亿)": 4.07, "GDP(万亿)": 15.99}, "mcap": 4.07}, {"date": "2005-08-29", "value": 24.88, "type": "", "extra": {"A股总市值(万亿)": 3.98, "GDP(万亿)": 15.99}, "mcap": 3.98}, {"date": "2005-09-13", "value": 27.02, "type": "", "extra": {"A股总市值(万亿)": 4.32, "GDP(万亿)": 15.99}, "mcap": 4.32}, {"date": "2005-09-28", "value": 23.96, "type": "", "extra": {"A股总市值(万亿)": 3.83, "GDP(万亿)": 15.99}, "mcap": 3.83}, {"date": "2005-10-13", "value": 24.81, "type": "", "extra": {"A股总市值(万亿)": 3.97, "GDP(万亿)": 15.99}, "mcap": 3.97}, {"date": "2005-10-28", "value": 21.9, "type": "", "extra": {"A股总市值(万亿)": 3.5, "GDP(万亿)": 15.99}, "mcap": 3.5}, {"date": "2005-11-12", "value": 22.28, "type": "", "extra": {"A股总市值(万亿)": 3.56, "GDP(万亿)": 15.99}, "mcap": 3.56}, {"date": "2005-11-27", "value": 23.28, "type": "", "extra": {"A股总市值(万亿)": 3.72, "GDP(万亿)": 15.99}, "mcap": 3.72}, {"date": "2005-12-12", "value": 23.34, "type": "", "extra": {"A股总市值(万亿)": 3.73, "GDP(万亿)": 15.99}, "mcap": 3.73}, {"date": "2005-12-27", "value": 24.88, "type": "", "extra": {"A股总市值(万亿)": 3.98, "GDP(万亿)": 15.99}, "mcap": 3.98}, {"date": "2006-01-11", "value": 27.18, "type": "", "extra": {"A股总市值(万亿)": 4.35, "GDP(万亿)": 15.99}, "mcap": 4.35}, {"date": "2006-01-26", "value": 24.83, "type": "", "extra": {"A股总市值(万亿)": 4.65, "GDP(万亿)": 18.73}, "mcap": 4.65}, {"date": "2006-02-10", "value": 25.68, "type": "", "extra": {"A股总市值(万亿)": 4.81, "GDP(万亿)": 18.73}, "mcap": 4.81}, {"date": "2006-02-25", "value": 26.17, "type": "", "extra": {"A股总市值(万亿)": 4.9, "GDP(万亿)": 18.73}, "mcap": 4.9}, {"date": "2006-03-12", "value": 24.4, "type": "", "extra": {"A股总市值(万亿)": 4.57, "GDP(万亿)": 18.73}, "mcap": 4.57}, {"date": "2006-03-27", "value": 26.14, "type": "", "extra": {"A股总市值(万亿)": 4.9, "GDP(万亿)": 18.73}, "mcap": 4.9}, {"date": "2006-04-11", "value": 28.44, "type": "", "extra": {"A股总市值(万亿)": 5.33, "GDP(万亿)": 18.73}, "mcap": 5.33}, {"date": "2006-04-26", "value": 30.35, "type": "", "extra": {"A股总市值(万亿)": 5.68, "GDP(万亿)": 18.73}, "mcap": 5.68}, {"date": "2006-05-11", "value": 34.5, "type": "", "extra": {"A股总市值(万亿)": 6.46, "GDP(万亿)": 18.73}, "mcap": 6.46}, {"date": "2006-05-26", "value": 37.15, "type": "", "extra": {"A股总市值(万亿)": 6.96, "GDP(万亿)": 18.73}, "mcap": 6.96}, {"date": "2006-06-10", "value": 34.99, "type": "", "extra": {"A股总市值(万亿)": 6.55, "GDP(万亿)": 18.73}, "mcap": 6.55}, {"date": "2006-06-25", "value": 36.87, "type": "", "extra": {"A股总市值(万亿)": 6.91, "GDP(万亿)": 18.73}, "mcap": 6.91}, {"date": "2006-07-10", "value": 41.32, "type": "", "extra": {"A股总市值(万亿)": 7.74, "GDP(万亿)": 18.73}, "mcap": 7.74}, {"date": "2006-07-25", "value": 39.63, "type": "", "extra": {"A股总市值(万亿)": 7.42, "GDP(万亿)": 18.73}, "mcap": 7.42}, {"date": "2006-08-09", "value": 35.93, "type": "", "extra": {"A股总市值(万亿)": 6.73, "GDP(万亿)": 18.73}, "mcap": 6.73}, {"date": "2006-08-24", "value": 37.47, "type": "", "extra": {"A股总市值(万亿)": 7.02, "GDP(万亿)": 18.73}, "mcap": 7.02}, {"date": "2006-09-08", "value": 39.02, "type": "", "extra": {"A股总市值(万亿)": 7.31, "GDP(万亿)": 18.73}, "mcap": 7.31}, {"date": "2006-09-23", "value": 41.01, "type": "", "extra": {"A股总市值(万亿)": 7.68, "GDP(万亿)": 18.73}, "mcap": 7.68}, {"date": "2006-10-23", "value": 42.19, "type": "", "extra": {"A股总市值(万亿)": 7.9, "GDP(万亿)": 18.73}, "mcap": 7.9}, {"date": "2006-11-07", "value": 46.69, "type": "", "extra": {"A股总市值(万亿)": 8.75, "GDP(万亿)": 18.73}, "mcap": 8.75}, {"date": "2006-11-22", "value": 51.95, "type": "", "extra": {"A股总市值(万亿)": 9.73, "GDP(万亿)": 18.73}, "mcap": 9.73}, {"date": "2006-12-07", "value": 55.95, "type": "", "extra": {"A股总市值(万亿)": 10.48, "GDP(万亿)": 18.73}, "mcap": 10.48}, {"date": "2006-12-22", "value": 62.42, "type": "", "extra": {"A股总市值(万亿)": 11.69, "GDP(万亿)": 18.73}, "mcap": 11.69}, {"date": "2007-01-06", "value": 72.73, "type": "", "extra": {"A股总市值(万亿)": 13.62, "GDP(万亿)": 18.73}, "mcap": 13.62}, {"date": "2007-01-21", "value": 67.73, "type": "", "extra": {"A股总市值(万亿)": 14.86, "GDP(万亿)": 21.94}, "mcap": 14.86}, {"date": "2007-02-05", "value": 61.23, "type": "", "extra": {"A股总市值(万亿)": 13.43, "GDP(万亿)": 21.94}, "mcap": 13.43}, {"date": "2007-02-20", "value": 72.64, "type": "", "extra": {"A股总市值(万亿)": 15.94, "GDP(万亿)": 21.94}, "mcap": 15.94}, {"date": "2007-03-07", "value": 69.63, "type": "", "extra": {"A股总市值(万亿)": 15.28, "GDP(万亿)": 21.94}, "mcap": 15.28}, {"date": "2007-03-22", "value": 74.79, "type": "", "extra": {"A股总市值(万亿)": 16.41, "GDP(万亿)": 21.94}, "mcap": 16.41}, {"date": "2007-04-06", "value": 82.25, "type": "", "extra": {"A股总市值(万亿)": 18.05, "GDP(万亿)": 21.94}, "mcap": 18.05}, {"date": "2007-04-21", "value": 89.95, "type": "", "extra": {"A股总市值(万亿)": 19.74, "GDP(万亿)": 21.94}, "mcap": 19.74}, {"date": "2007-05-06", "value": 97.55, "type": "", "extra": {"A股总市值(万亿)": 21.4, "GDP(万亿)": 21.94}, "mcap": 21.4}, {"date": "2007-05-21", "value": 104.38, "type": "", "extra": {"A股总市值(万亿)": 22.9, "GDP(万亿)": 21.94}, "mcap": 22.9}, {"date": "2007-06-05", "value": 95.36, "type": "", "extra": {"A股总市值(万亿)": 20.92, "GDP(万亿)": 21.94}, "mcap": 20.92}, {"date": "2007-06-20", "value": 107.6, "type": "", "extra": {"A股总市值(万亿)": 23.61, "GDP(万亿)": 21.94}, "mcap": 23.61}, {"date": "2007-07-05", "value": 90.89, "type": "", "extra": {"A股总市值(万亿)": 19.94, "GDP(万亿)": 21.94}, "mcap": 19.94}, {"date": "2007-07-20", "value": 103.98, "type": "", "extra": {"A股总市值(万亿)": 22.81, "GDP(万亿)": 21.94}, "mcap": 22.81}, {"date": "2007-08-04", "value": 118.82, "type": "", "extra": {"A股总市值(万亿)": 26.07, "GDP(万亿)": 21.94}, "mcap": 26.07}, {"date": "2007-08-19", "value": 121.65, "type": "", "extra": {"A股总市值(万亿)": 26.69, "GDP(万亿)": 21.94}, "mcap": 26.69}, {"date": "2007-09-03", "value": 141.29, "type": "", "extra": {"A股总市值(万亿)": 31.0, "GDP(万亿)": 21.94}, "mcap": 31.0}, {"date": "2007-09-18", "value": 144.37, "type": "", "extra": {"A股总市值(万亿)": 31.68, "GDP(万亿)": 21.94}, "mcap": 31.68}, {"date": "2007-10-03", "value": 148.13, "type": "", "extra": {"A股总市值(万亿)": 32.5, "GDP(万亿)": 21.94}, "mcap": 32.5}, {"date": "2007-10-16", "value": 164.08, "type": "牛市顶点(6124)", "extra": {"A股总市值(万亿)": 36.0, "GDP(万亿)": 21.94}, "mcap": 36.0}, {"date": "2007-10-18", "value": 157.05, "type": "", "extra": {"A股总市值(万亿)": 34.46, "GDP(万亿)": 21.94}, "mcap": 34.46}, {"date": "2007-11-02", "value": 155.8, "type": "", "extra": {"A股总市值(万亿)": 34.18, "GDP(万亿)": 21.94}, "mcap": 34.18}, {"date": "2007-11-17", "value": 143.62, "type": "", "extra": {"A股总市值(万亿)": 31.51, "GDP(万亿)": 21.94}, "mcap": 31.51}, {"date": "2007-12-02", "value": 131.9, "type": "", "extra": {"A股总市值(万亿)": 28.94, "GDP(万亿)": 21.94}, "mcap": 28.94}, {"date": "2007-12-17", "value": 132.03, "type": "", "extra": {"A股总市值(万亿)": 28.97, "GDP(万亿)": 21.94}, "mcap": 28.97}, {"date": "2008-01-01", "value": 142.18, "type": "", "extra": {"A股总市值(万亿)": 31.19, "GDP(万亿)": 21.94}, "mcap": 31.19}, {"date": "2008-01-16", "value": 142.95, "type": "", "extra": {"A股总市值(万亿)": 31.36, "GDP(万亿)": 21.94}, "mcap": 31.36}, {"date": "2008-01-31", "value": 96.68, "type": "", "extra": {"A股总市值(万亿)": 26.11, "GDP(万亿)": 27.01}, "mcap": 26.11}, {"date": "2008-02-15", "value": 99.11, "type": "", "extra": {"A股总市值(万亿)": 26.77, "GDP(万亿)": 27.01}, "mcap": 26.77}, {"date": "2008-03-01", "value": 95.93, "type": "", "extra": {"A股总市值(万亿)": 25.91, "GDP(万亿)": 27.01}, "mcap": 25.91}, {"date": "2008-03-16", "value": 87.66, "type": "", "extra": {"A股总市值(万亿)": 23.68, "GDP(万亿)": 27.01}, "mcap": 23.68}, {"date": "2008-03-31", "value": 77.17, "type": "", "extra": {"A股总市值(万亿)": 20.84, "GDP(万亿)": 27.01}, "mcap": 20.84}, {"date": "2008-04-15", "value": 74.5, "type": "", "extra": {"A股总市值(万亿)": 20.12, "GDP(万亿)": 27.01}, "mcap": 20.12}, {"date": "2008-04-30", "value": 81.89, "type": "", "extra": {"A股总市值(万亿)": 22.12, "GDP(万亿)": 27.01}, "mcap": 22.12}, {"date": "2008-05-15", "value": 80.69, "type": "", "extra": {"A股总市值(万亿)": 21.8, "GDP(万亿)": 27.01}, "mcap": 21.8}, {"date": "2008-05-30", "value": 76.32, "type": "", "extra": {"A股总市值(万亿)": 20.61, "GDP(万亿)": 27.01}, "mcap": 20.61}, {"date": "2008-06-14", "value": 64.23, "type": "", "extra": {"A股总市值(万亿)": 17.35, "GDP(万亿)": 27.01}, "mcap": 17.35}, {"date": "2008-06-29", "value": 61.65, "type": "", "extra": {"A股总市值(万亿)": 16.65, "GDP(万亿)": 27.01}, "mcap": 16.65}, {"date": "2008-07-14", "value": 64.43, "type": "", "extra": {"A股总市值(万亿)": 17.4, "GDP(万亿)": 27.01}, "mcap": 17.4}, {"date": "2008-07-29", "value": 63.83, "type": "", "extra": {"A股总市值(万亿)": 17.24, "GDP(万亿)": 27.01}, "mcap": 17.24}, {"date": "2008-08-13", "value": 55.18, "type": "", "extra": {"A股总市值(万亿)": 14.9, "GDP(万亿)": 27.01}, "mcap": 14.9}, {"date": "2008-08-28", "value": 53.12, "type": "", "extra": {"A股总市值(万亿)": 14.35, "GDP(万亿)": 27.01}, "mcap": 14.35}, {"date": "2008-09-12", "value": 47.32, "type": "", "extra": {"A股总市值(万亿)": 12.78, "GDP(万亿)": 27.01}, "mcap": 12.78}, {"date": "2008-09-27", "value": 51.91, "type": "", "extra": {"A股总市值(万亿)": 14.02, "GDP(万亿)": 27.01}, "mcap": 14.02}, {"date": "2008-10-12", "value": 45.63, "type": "", "extra": {"A股总市值(万亿)": 12.32, "GDP(万亿)": 27.01}, "mcap": 12.32}, {"date": "2008-10-27", "value": 39.69, "type": "", "extra": {"A股总市值(万亿)": 10.72, "GDP(万亿)": 27.01}, "mcap": 10.72}, {"date": "2008-10-28", "value": 40.73, "type": "熊市底部(1664)", "extra": {"A股总市值(万亿)": 11.0, "GDP(万亿)": 27.01}, "mcap": 11.0}, {"date": "2008-11-11", "value": 43.09, "type": "", "extra": {"A股总市值(万亿)": 11.64, "GDP(万亿)": 27.01}, "mcap": 11.64}, {"date": "2008-11-26", "value": 44.88, "type": "", "extra": {"A股总市值(万亿)": 12.12, "GDP(万亿)": 27.01}, "mcap": 12.12}, {"date": "2008-12-11", "value": 49.29, "type": "", "extra": {"A股总市值(万亿)": 13.31, "GDP(万亿)": 27.01}, "mcap": 13.31}, {"date": "2008-12-26", "value": 43.35, "type": "", "extra": {"A股总市值(万亿)": 11.71, "GDP(万亿)": 27.01}, "mcap": 11.71}, {"date": "2009-01-10", "value": 45.11, "type": "", "extra": {"A股总市值(万亿)": 12.18, "GDP(万亿)": 27.01}, "mcap": 12.18}, {"date": "2009-01-25", "value": 40.56, "type": "", "extra": {"A股总市值(万亿)": 12.95, "GDP(万亿)": 31.92}, "mcap": 12.95}, {"date": "2009-02-09", "value": 47.09, "type": "", "extra": {"A股总市值(万亿)": 15.03, "GDP(万亿)": 31.92}, "mcap": 15.03}, {"date": "2009-02-24", "value": 46.42, "type": "", "extra": {"A股总市值(万亿)": 14.82, "GDP(万亿)": 31.92}, "mcap": 14.82}, {"date": "2009-03-11", "value": 44.7, "type": "", "extra": {"A股总市值(万亿)": 14.27, "GDP(万亿)": 31.92}, "mcap": 14.27}, {"date": "2009-03-26", "value": 50.91, "type": "", "extra": {"A股总市值(万亿)": 16.25, "GDP(万亿)": 31.92}, "mcap": 16.25}, {"date": "2009-04-10", "value": 53.21, "type": "", "extra": {"A股总市值(万亿)": 16.99, "GDP(万亿)": 31.92}, "mcap": 16.99}, {"date": "2009-04-25", "value": 53.33, "type": "", "extra": {"A股总市值(万亿)": 17.02, "GDP(万亿)": 31.92}, "mcap": 17.02}, {"date": "2009-05-10", "value": 58.27, "type": "", "extra": {"A股总市值(万亿)": 18.6, "GDP(万亿)": 31.92}, "mcap": 18.6}, {"date": "2009-05-25", "value": 57.84, "type": "", "extra": {"A股总市值(万亿)": 18.46, "GDP(万亿)": 31.92}, "mcap": 18.46}, {"date": "2009-06-09", "value": 62.8, "type": "", "extra": {"A股总市值(万亿)": 20.04, "GDP(万亿)": 31.92}, "mcap": 20.04}, {"date": "2009-06-24", "value": 66.55, "type": "", "extra": {"A股总市值(万亿)": 21.24, "GDP(万亿)": 31.92}, "mcap": 21.24}, {"date": "2009-07-09", "value": 72.14, "type": "", "extra": {"A股总市值(万亿)": 23.03, "GDP(万亿)": 31.92}, "mcap": 23.03}, {"date": "2009-07-24", "value": 79.1, "type": "", "extra": {"A股总市值(万亿)": 25.25, "GDP(万亿)": 31.92}, "mcap": 25.25}, {"date": "2009-08-04", "value": 81.86, "type": "牛市顶点(3478)", "extra": {"A股总市值(万亿)": 26.13, "GDP(万亿)": 31.92}, "mcap": 26.13}, {"date": "2009-08-08", "value": 75.98, "type": "", "extra": {"A股总市值(万亿)": 24.25, "GDP(万亿)": 31.92}, "mcap": 24.25}, {"date": "2009-08-23", "value": 67.62, "type": "", "extra": {"A股总市值(万亿)": 21.58, "GDP(万亿)": 31.92}, "mcap": 21.58}, {"date": "2009-09-07", "value": 65.4, "type": "", "extra": {"A股总市值(万亿)": 20.87, "GDP(万亿)": 31.92}, "mcap": 20.87}, {"date": "2009-09-22", "value": 65.86, "type": "", "extra": {"A股总市值(万亿)": 21.02, "GDP(万亿)": 31.92}, "mcap": 21.02}, {"date": "2009-10-07", "value": 62.56, "type": "", "extra": {"A股总市值(万亿)": 19.97, "GDP(万亿)": 31.92}, "mcap": 19.97}, {"date": "2009-10-22", "value": 70.15, "type": "", "extra": {"A股总市值(万亿)": 22.39, "GDP(万亿)": 31.92}, "mcap": 22.39}, {"date": "2009-11-06", "value": 73.29, "type": "", "extra": {"A股总市值(万亿)": 23.39, "GDP(万亿)": 31.92}, "mcap": 23.39}, {"date": "2009-11-21", "value": 77.31, "type": "", "extra": {"A股总市值(万亿)": 24.68, "GDP(万亿)": 31.92}, "mcap": 24.68}, {"date": "2009-12-06", "value": 77.55, "type": "", "extra": {"A股总市值(万亿)": 24.76, "GDP(万亿)": 31.92}, "mcap": 24.76}, {"date": "2009-12-21", "value": 72.14, "type": "", "extra": {"A股总市值(万亿)": 23.03, "GDP(万亿)": 31.92}, "mcap": 23.03}, {"date": "2010-01-05", "value": 76.51, "type": "", "extra": {"A股总市值(万亿)": 24.42, "GDP(万亿)": 31.92}, "mcap": 24.42}, {"date": "2010-01-20", "value": 68.51, "type": "", "extra": {"A股总市值(万亿)": 23.88, "GDP(万亿)": 34.85}, "mcap": 23.88}, {"date": "2010-02-04", "value": 66.64, "type": "", "extra": {"A股总市值(万亿)": 23.22, "GDP(万亿)": 34.85}, "mcap": 23.22}, {"date": "2010-02-19", "value": 66.91, "type": "", "extra": {"A股总市值(万亿)": 23.32, "GDP(万亿)": 34.85}, "mcap": 23.32}, {"date": "2010-03-06", "value": 67.07, "type": "", "extra": {"A股总市值(万亿)": 23.37, "GDP(万亿)": 34.85}, "mcap": 23.37}, {"date": "2010-03-21", "value": 67.51, "type": "", "extra": {"A股总市值(万亿)": 23.53, "GDP(万亿)": 34.85}, "mcap": 23.53}, {"date": "2010-04-05", "value": 68.59, "type": "", "extra": {"A股总市值(万亿)": 23.9, "GDP(万亿)": 34.85}, "mcap": 23.9}, {"date": "2010-04-20", "value": 66.45, "type": "", "extra": {"A股总市值(万亿)": 23.16, "GDP(万亿)": 34.85}, "mcap": 23.16}, {"date": "2010-05-05", "value": 64.98, "type": "", "extra": {"A股总市值(万亿)": 22.65, "GDP(万亿)": 34.85}, "mcap": 22.65}, {"date": "2010-05-20", "value": 61.38, "type": "", "extra": {"A股总市值(万亿)": 21.39, "GDP(万亿)": 34.85}, "mcap": 21.39}, {"date": "2010-06-04", "value": 61.35, "type": "", "extra": {"A股总市值(万亿)": 21.38, "GDP(万亿)": 34.85}, "mcap": 21.38}, {"date": "2010-06-19", "value": 60.86, "type": "", "extra": {"A股总市值(万亿)": 21.21, "GDP(万亿)": 34.85}, "mcap": 21.21}, {"date": "2010-07-04", "value": 59.3, "type": "", "extra": {"A股总市值(万亿)": 20.67, "GDP(万亿)": 34.85}, "mcap": 20.67}, {"date": "2010-07-19", "value": 60.41, "type": "", "extra": {"A股总市值(万亿)": 21.05, "GDP(万亿)": 34.85}, "mcap": 21.05}, {"date": "2010-08-03", "value": 62.23, "type": "", "extra": {"A股总市值(万亿)": 21.69, "GDP(万亿)": 34.85}, "mcap": 21.69}, {"date": "2010-08-18", "value": 62.7, "type": "", "extra": {"A股总市值(万亿)": 21.85, "GDP(万亿)": 34.85}, "mcap": 21.85}, {"date": "2010-09-02", "value": 62.57, "type": "", "extra": {"A股总市值(万亿)": 21.81, "GDP(万亿)": 34.85}, "mcap": 21.81}, {"date": "2010-09-17", "value": 61.89, "type": "", "extra": {"A股总市值(万亿)": 21.57, "GDP(万亿)": 34.85}, "mcap": 21.57}, {"date": "2010-10-02", "value": 62.57, "type": "", "extra": {"A股总市值(万亿)": 21.81, "GDP(万亿)": 34.85}, "mcap": 21.81}, {"date": "2010-10-17", "value": 66.35, "type": "", "extra": {"A股总市值(万亿)": 23.12, "GDP(万亿)": 34.85}, "mcap": 23.12}, {"date": "2010-11-01", "value": 67.34, "type": "", "extra": {"A股总市值(万亿)": 23.47, "GDP(万亿)": 34.85}, "mcap": 23.47}, {"date": "2010-11-16", "value": 65.43, "type": "", "extra": {"A股总市值(万亿)": 22.8, "GDP(万亿)": 34.85}, "mcap": 22.8}, {"date": "2010-12-01", "value": 64.58, "type": "", "extra": {"A股总市值(万亿)": 22.51, "GDP(万亿)": 34.85}, "mcap": 22.51}, {"date": "2010-12-16", "value": 65.47, "type": "", "extra": {"A股总市值(万亿)": 22.82, "GDP(万亿)": 34.85}, "mcap": 22.82}, {"date": "2010-12-31", "value": 64.4, "type": "", "extra": {"A股总市值(万亿)": 22.44, "GDP(万亿)": 34.85}, "mcap": 22.44}, {"date": "2011-01-15", "value": 64.2, "type": "", "extra": {"A股总市值(万亿)": 22.37, "GDP(万亿)": 34.85}, "mcap": 22.37}, {"date": "2011-01-30", "value": 53.9, "type": "", "extra": {"A股总市值(万亿)": 22.21, "GDP(万亿)": 41.21}, "mcap": 22.21}, {"date": "2011-02-14", "value": 55.38, "type": "", "extra": {"A股总市值(万亿)": 22.82, "GDP(万亿)": 41.21}, "mcap": 22.82}, {"date": "2011-03-01", "value": 55.58, "type": "", "extra": {"A股总市值(万亿)": 22.9, "GDP(万亿)": 41.21}, "mcap": 22.9}, {"date": "2011-03-16", "value": 55.7, "type": "", "extra": {"A股总市值(万亿)": 22.95, "GDP(万亿)": 41.21}, "mcap": 22.95}, {"date": "2011-03-31", "value": 55.67, "type": "", "extra": {"A股总市值(万亿)": 22.94, "GDP(万亿)": 41.21}, "mcap": 22.94}, {"date": "2011-04-15", "value": 56.91, "type": "", "extra": {"A股总市值(万亿)": 23.45, "GDP(万亿)": 41.21}, "mcap": 23.45}, {"date": "2011-04-30", "value": 55.51, "type": "", "extra": {"A股总市值(万亿)": 22.87, "GDP(万亿)": 41.21}, "mcap": 22.87}, {"date": "2011-05-15", "value": 55.1, "type": "", "extra": {"A股总市值(万亿)": 22.7, "GDP(万亿)": 41.21}, "mcap": 22.7}, {"date": "2011-05-30", "value": 53.43, "type": "", "extra": {"A股总市值(万亿)": 22.02, "GDP(万亿)": 41.21}, "mcap": 22.02}, {"date": "2011-06-14", "value": 53.67, "type": "", "extra": {"A股总市值(万亿)": 22.12, "GDP(万亿)": 41.21}, "mcap": 22.12}, {"date": "2011-06-29", "value": 53.65, "type": "", "extra": {"A股总市值(万亿)": 22.11, "GDP(万亿)": 41.21}, "mcap": 22.11}, {"date": "2011-07-14", "value": 54.48, "type": "", "extra": {"A股总市值(万亿)": 22.45, "GDP(万亿)": 41.21}, "mcap": 22.45}, {"date": "2011-07-29", "value": 53.38, "type": "", "extra": {"A股总市值(万亿)": 22.0, "GDP(万亿)": 41.21}, "mcap": 22.0}, {"date": "2011-08-13", "value": 52.28, "type": "", "extra": {"A股总市值(万亿)": 21.55, "GDP(万亿)": 41.21}, "mcap": 21.55}, {"date": "2011-08-28", "value": 52.47, "type": "", "extra": {"A股总市值(万亿)": 21.62, "GDP(万亿)": 41.21}, "mcap": 21.62}, {"date": "2011-09-12", "value": 51.31, "type": "", "extra": {"A股总市值(万亿)": 21.15, "GDP(万亿)": 41.21}, "mcap": 21.15}, {"date": "2011-09-27", "value": 50.48, "type": "", "extra": {"A股总市值(万亿)": 20.8, "GDP(万亿)": 41.21}, "mcap": 20.8}, {"date": "2011-10-12", "value": 50.53, "type": "", "extra": {"A股总市值(万亿)": 20.82, "GDP(万亿)": 41.21}, "mcap": 20.82}, {"date": "2011-10-27", "value": 50.69, "type": "", "extra": {"A股总市值(万亿)": 20.89, "GDP(万亿)": 41.21}, "mcap": 20.89}, {"date": "2011-11-11", "value": 51.15, "type": "", "extra": {"A股总市值(万亿)": 21.08, "GDP(万亿)": 41.21}, "mcap": 21.08}, {"date": "2011-11-26", "value": 50.12, "type": "", "extra": {"A股总市值(万亿)": 20.66, "GDP(万亿)": 41.21}, "mcap": 20.66}, {"date": "2011-12-11", "value": 49.47, "type": "", "extra": {"A股总市值(万亿)": 20.39, "GDP(万亿)": 41.21}, "mcap": 20.39}, {"date": "2011-12-26", "value": 48.2, "type": "", "extra": {"A股总市值(万亿)": 19.86, "GDP(万亿)": 41.21}, "mcap": 19.86}, {"date": "2012-01-10", "value": 49.17, "type": "", "extra": {"A股总市值(万亿)": 20.26, "GDP(万亿)": 41.21}, "mcap": 20.26}, {"date": "2012-01-25", "value": 41.81, "type": "", "extra": {"A股总市值(万亿)": 20.4, "GDP(万亿)": 48.79}, "mcap": 20.4}, {"date": "2012-02-09", "value": 42.07, "type": "", "extra": {"A股总市值(万亿)": 20.53, "GDP(万亿)": 48.79}, "mcap": 20.53}, {"date": "2012-02-24", "value": 42.85, "type": "", "extra": {"A股总市值(万亿)": 20.9, "GDP(万亿)": 48.79}, "mcap": 20.9}, {"date": "2012-03-10", "value": 42.84, "type": "", "extra": {"A股总市值(万亿)": 20.9, "GDP(万亿)": 48.79}, "mcap": 20.9}, {"date": "2012-03-25", "value": 42.07, "type": "", "extra": {"A股总市值(万亿)": 20.53, "GDP(万亿)": 48.79}, "mcap": 20.53}, {"date": "2012-04-09", "value": 41.53, "type": "", "extra": {"A股总市值(万亿)": 20.26, "GDP(万亿)": 48.79}, "mcap": 20.26}, {"date": "2012-04-24", "value": 42.41, "type": "", "extra": {"A股总市值(万亿)": 20.69, "GDP(万亿)": 48.79}, "mcap": 20.69}, {"date": "2012-05-09", "value": 42.58, "type": "", "extra": {"A股总市值(万亿)": 20.77, "GDP(万亿)": 48.79}, "mcap": 20.77}, {"date": "2012-05-24", "value": 42.09, "type": "", "extra": {"A股总市值(万亿)": 20.53, "GDP(万亿)": 48.79}, "mcap": 20.53}, {"date": "2012-06-08", "value": 41.49, "type": "", "extra": {"A股总市值(万亿)": 20.24, "GDP(万亿)": 48.79}, "mcap": 20.24}, {"date": "2012-06-23", "value": 41.32, "type": "", "extra": {"A股总市值(万亿)": 20.16, "GDP(万亿)": 48.79}, "mcap": 20.16}, {"date": "2012-07-08", "value": 41.0, "type": "", "extra": {"A股总市值(万亿)": 20.0, "GDP(万亿)": 48.79}, "mcap": 20.0}, {"date": "2012-07-23", "value": 40.29, "type": "", "extra": {"A股总市值(万亿)": 19.66, "GDP(万亿)": 48.79}, "mcap": 19.66}, {"date": "2012-08-07", "value": 40.43, "type": "", "extra": {"A股总市值(万亿)": 19.73, "GDP(万亿)": 48.79}, "mcap": 19.73}, {"date": "2012-08-22", "value": 40.01, "type": "", "extra": {"A股总市值(万亿)": 19.52, "GDP(万亿)": 48.79}, "mcap": 19.52}, {"date": "2012-09-06", "value": 39.53, "type": "", "extra": {"A股总市值(万亿)": 19.29, "GDP(万亿)": 48.79}, "mcap": 19.29}, {"date": "2012-09-21", "value": 39.31, "type": "", "extra": {"A股总市值(万亿)": 19.18, "GDP(万亿)": 48.79}, "mcap": 19.18}, {"date": "2012-10-21", "value": 40.18, "type": "", "extra": {"A股总市值(万亿)": 19.6, "GDP(万亿)": 48.79}, "mcap": 19.6}, {"date": "2012-11-05", "value": 40.06, "type": "", "extra": {"A股总市值(万亿)": 19.55, "GDP(万亿)": 48.79}, "mcap": 19.55}, {"date": "2012-11-20", "value": 39.16, "type": "", "extra": {"A股总市值(万亿)": 19.11, "GDP(万亿)": 48.79}, "mcap": 19.11}, {"date": "2012-12-05", "value": 39.36, "type": "", "extra": {"A股总市值(万亿)": 19.2, "GDP(万亿)": 48.79}, "mcap": 19.2}, {"date": "2012-12-20", "value": 40.52, "type": "", "extra": {"A股总市值(万亿)": 19.77, "GDP(万亿)": 48.79}, "mcap": 19.77}, {"date": "2013-01-04", "value": 41.45, "type": "", "extra": {"A股总市值(万亿)": 20.23, "GDP(万亿)": 48.79}, "mcap": 20.23}, {"date": "2013-01-19", "value": 37.86, "type": "", "extra": {"A股总市值(万亿)": 20.39, "GDP(万亿)": 53.86}, "mcap": 20.39}, {"date": "2013-02-03", "value": 38.65, "type": "", "extra": {"A股总市值(万亿)": 20.82, "GDP(万亿)": 53.86}, "mcap": 20.82}, {"date": "2013-02-18", "value": 38.67, "type": "", "extra": {"A股总市值(万亿)": 20.83, "GDP(万亿)": 53.86}, "mcap": 20.83}, {"date": "2013-03-05", "value": 37.93, "type": "", "extra": {"A股总市值(万亿)": 20.43, "GDP(万亿)": 53.86}, "mcap": 20.43}, {"date": "2013-03-20", "value": 37.86, "type": "", "extra": {"A股总市值(万亿)": 20.39, "GDP(万亿)": 53.86}, "mcap": 20.39}, {"date": "2013-04-04", "value": 37.15, "type": "", "extra": {"A股总市值(万亿)": 20.01, "GDP(万亿)": 53.86}, "mcap": 20.01}, {"date": "2013-04-19", "value": 37.3, "type": "", "extra": {"A股总市值(万亿)": 20.09, "GDP(万亿)": 53.86}, "mcap": 20.09}, {"date": "2013-05-04", "value": 37.0, "type": "", "extra": {"A股总市值(万亿)": 19.93, "GDP(万亿)": 53.86}, "mcap": 19.93}, {"date": "2013-05-19", "value": 37.6, "type": "", "extra": {"A股总市值(万亿)": 20.25, "GDP(万亿)": 53.86}, "mcap": 20.25}, {"date": "2013-06-03", "value": 37.72, "type": "", "extra": {"A股总市值(万亿)": 20.32, "GDP(万亿)": 53.86}, "mcap": 20.32}, {"date": "2013-06-18", "value": 36.64, "type": "", "extra": {"A股总市值(万亿)": 19.73, "GDP(万亿)": 53.86}, "mcap": 19.73}, {"date": "2013-06-25", "value": 35.09, "type": "熊市底部(1849)", "extra": {"A股总市值(万亿)": 18.9, "GDP(万亿)": 53.86}, "mcap": 18.9}, {"date": "2013-07-03", "value": 36.02, "type": "", "extra": {"A股总市值(万亿)": 19.4, "GDP(万亿)": 53.86}, "mcap": 19.4}, {"date": "2013-07-18", "value": 36.8, "type": "", "extra": {"A股总市值(万亿)": 19.82, "GDP(万亿)": 53.86}, "mcap": 19.82}, {"date": "2013-08-02", "value": 36.96, "type": "", "extra": {"A股总市值(万亿)": 19.91, "GDP(万亿)": 53.86}, "mcap": 19.91}, {"date": "2013-08-17", "value": 38.01, "type": "", "extra": {"A股总市值(万亿)": 20.47, "GDP(万亿)": 53.86}, "mcap": 20.47}, {"date": "2013-09-01", "value": 38.81, "type": "", "extra": {"A股总市值(万亿)": 20.9, "GDP(万亿)": 53.86}, "mcap": 20.9}, {"date": "2013-09-16", "value": 42.38, "type": "", "extra": {"A股总市值(万亿)": 22.82, "GDP(万亿)": 53.86}, "mcap": 22.82}, {"date": "2013-10-01", "value": 40.86, "type": "", "extra": {"A股总市值(万亿)": 22.0, "GDP(万亿)": 53.86}, "mcap": 22.0}, {"date": "2013-10-16", "value": 41.35, "type": "", "extra": {"A股总市值(万亿)": 22.27, "GDP(万亿)": 53.86}, "mcap": 22.27}, {"date": "2013-10-31", "value": 39.97, "type": "", "extra": {"A股总市值(万亿)": 21.53, "GDP(万亿)": 53.86}, "mcap": 21.53}, {"date": "2013-11-15", "value": 39.81, "type": "", "extra": {"A股总市值(万亿)": 21.44, "GDP(万亿)": 53.86}, "mcap": 21.44}, {"date": "2013-11-30", "value": 42.08, "type": "", "extra": {"A股总市值(万亿)": 22.67, "GDP(万亿)": 53.86}, "mcap": 22.67}, {"date": "2013-12-15", "value": 41.43, "type": "", "extra": {"A股总市值(万亿)": 22.31, "GDP(万亿)": 53.86}, "mcap": 22.31}, {"date": "2013-12-30", "value": 38.79, "type": "", "extra": {"A股总市值(万亿)": 20.89, "GDP(万亿)": 53.86}, "mcap": 20.89}, {"date": "2014-01-14", "value": 36.89, "type": "", "extra": {"A股总市值(万亿)": 19.87, "GDP(万亿)": 53.86}, "mcap": 19.87}, {"date": "2014-01-29", "value": 34.07, "type": "", "extra": {"A股总市值(万亿)": 20.2, "GDP(万亿)": 59.3}, "mcap": 20.2}, {"date": "2014-02-13", "value": 35.25, "type": "", "extra": {"A股总市值(万亿)": 20.9, "GDP(万亿)": 59.3}, "mcap": 20.9}, {"date": "2014-02-28", "value": 34.23, "type": "", "extra": {"A股总市值(万亿)": 20.3, "GDP(万亿)": 59.3}, "mcap": 20.3}, {"date": "2014-03-15", "value": 32.96, "type": "", "extra": {"A股总市值(万亿)": 19.55, "GDP(万亿)": 59.3}, "mcap": 19.55}, {"date": "2014-03-30", "value": 33.87, "type": "", "extra": {"A股总市值(万亿)": 20.09, "GDP(万亿)": 59.3}, "mcap": 20.09}, {"date": "2014-04-14", "value": 36.06, "type": "", "extra": {"A股总市值(万亿)": 21.38, "GDP(万亿)": 59.3}, "mcap": 21.38}, {"date": "2014-04-29", "value": 33.35, "type": "", "extra": {"A股总市值(万亿)": 19.78, "GDP(万亿)": 59.3}, "mcap": 19.78}, {"date": "2014-05-14", "value": 34.02, "type": "", "extra": {"A股总市值(万亿)": 20.18, "GDP(万亿)": 59.3}, "mcap": 20.18}, {"date": "2014-05-29", "value": 33.84, "type": "", "extra": {"A股总市值(万亿)": 20.07, "GDP(万亿)": 59.3}, "mcap": 20.07}, {"date": "2014-06-13", "value": 34.58, "type": "", "extra": {"A股总市值(万亿)": 20.5, "GDP(万亿)": 59.3}, "mcap": 20.5}, {"date": "2014-06-28", "value": 33.75, "type": "", "extra": {"A股总市值(万亿)": 20.01, "GDP(万亿)": 59.3}, "mcap": 20.01}, {"date": "2014-07-13", "value": 34.0, "type": "", "extra": {"A股总市值(万亿)": 20.16, "GDP(万亿)": 59.3}, "mcap": 20.16}, {"date": "2014-07-28", "value": 37.19, "type": "", "extra": {"A股总市值(万亿)": 22.05, "GDP(万亿)": 59.3}, "mcap": 22.05}, {"date": "2014-08-12", "value": 38.25, "type": "", "extra": {"A股总市值(万亿)": 22.68, "GDP(万亿)": 59.3}, "mcap": 22.68}, {"date": "2014-08-27", "value": 37.95, "type": "", "extra": {"A股总市值(万亿)": 22.51, "GDP(万亿)": 59.3}, "mcap": 22.51}, {"date": "2014-09-11", "value": 40.44, "type": "", "extra": {"A股总市值(万亿)": 23.98, "GDP(万亿)": 59.3}, "mcap": 23.98}, {"date": "2014-09-26", "value": 41.32, "type": "", "extra": {"A股总市值(万亿)": 24.5, "GDP(万亿)": 59.3}, "mcap": 24.5}, {"date": "2014-10-11", "value": 41.97, "type": "", "extra": {"A股总市值(万亿)": 24.89, "GDP(万亿)": 59.3}, "mcap": 24.89}, {"date": "2014-10-26", "value": 40.21, "type": "", "extra": {"A股总市值(万亿)": 23.85, "GDP(万亿)": 59.3}, "mcap": 23.85}, {"date": "2014-11-10", "value": 44.38, "type": "", "extra": {"A股总市值(万亿)": 26.32, "GDP(万亿)": 59.3}, "mcap": 26.32}, {"date": "2014-11-25", "value": 46.67, "type": "", "extra": {"A股总市值(万亿)": 27.67, "GDP(万亿)": 59.3}, "mcap": 27.67}, {"date": "2014-12-10", "value": 55.73, "type": "", "extra": {"A股总市值(万亿)": 33.05, "GDP(万亿)": 59.3}, "mcap": 33.05}, {"date": "2014-12-25", "value": 58.96, "type": "", "extra": {"A股总市值(万亿)": 34.96, "GDP(万亿)": 59.3}, "mcap": 34.96}, {"date": "2015-01-09", "value": 64.39, "type": "", "extra": {"A股总市值(万亿)": 38.19, "GDP(万亿)": 59.3}, "mcap": 38.19}, {"date": "2015-01-24", "value": 61.13, "type": "", "extra": {"A股总市值(万亿)": 39.34, "GDP(万亿)": 64.36}, "mcap": 39.34}, {"date": "2015-02-08", "value": 53.65, "type": "", "extra": {"A股总市值(万亿)": 34.53, "GDP(万亿)": 64.36}, "mcap": 34.53}, {"date": "2015-02-23", "value": 58.29, "type": "", "extra": {"A股总市值(万亿)": 37.51, "GDP(万亿)": 64.36}, "mcap": 37.51}, {"date": "2015-03-10", "value": 59.35, "type": "", "extra": {"A股总市值(万亿)": 38.2, "GDP(万亿)": 64.36}, "mcap": 38.2}, {"date": "2015-03-25", "value": 69.5, "type": "", "extra": {"A股总市值(万亿)": 44.73, "GDP(万亿)": 64.36}, "mcap": 44.73}, {"date": "2015-04-09", "value": 77.55, "type": "", "extra": {"A股总市值(万亿)": 49.91, "GDP(万亿)": 64.36}, "mcap": 49.91}, {"date": "2015-04-24", "value": 89.37, "type": "", "extra": {"A股总市值(万亿)": 57.52, "GDP(万亿)": 64.36}, "mcap": 57.52}, {"date": "2015-05-09", "value": 84.28, "type": "", "extra": {"A股总市值(万亿)": 54.24, "GDP(万亿)": 64.36}, "mcap": 54.24}, {"date": "2015-05-24", "value": 96.53, "type": "", "extra": {"A股总市值(万亿)": 62.12, "GDP(万亿)": 64.36}, "mcap": 62.12}, {"date": "2015-06-08", "value": 109.38, "type": "", "extra": {"A股总市值(万亿)": 70.4, "GDP(万亿)": 64.36}, "mcap": 70.4}, {"date": "2015-06-12", "value": 110.32, "type": "牛市顶点(5178)", "extra": {"A股总市值(万亿)": 71.0, "GDP(万亿)": 64.36}, "mcap": 71.0}, {"date": "2015-06-23", "value": 101.34, "type": "", "extra": {"A股总市值(万亿)": 65.22, "GDP(万亿)": 64.36}, "mcap": 65.22}, {"date": "2015-07-08", "value": 85.07, "type": "", "extra": {"A股总市值(万亿)": 54.75, "GDP(万亿)": 64.36}, "mcap": 54.75}, {"date": "2015-07-23", "value": 94.46, "type": "", "extra": {"A股总市值(万亿)": 60.79, "GDP(万亿)": 64.36}, "mcap": 60.79}, {"date": "2015-08-07", "value": 88.68, "type": "", "extra": {"A股总市值(万亿)": 57.07, "GDP(万亿)": 64.36}, "mcap": 57.07}, {"date": "2015-08-22", "value": 85.08, "type": "", "extra": {"A股总市值(万亿)": 54.76, "GDP(万亿)": 64.36}, "mcap": 54.76}, {"date": "2015-09-06", "value": 79.79, "type": "", "extra": {"A股总市值(万亿)": 51.35, "GDP(万亿)": 64.36}, "mcap": 51.35}, {"date": "2015-09-21", "value": 79.74, "type": "", "extra": {"A股总市值(万亿)": 51.32, "GDP(万亿)": 64.36}, "mcap": 51.32}, {"date": "2015-10-06", "value": 78.16, "type": "", "extra": {"A股总市值(万亿)": 50.3, "GDP(万亿)": 64.36}, "mcap": 50.3}, {"date": "2015-10-21", "value": 82.23, "type": "", "extra": {"A股总市值(万亿)": 52.93, "GDP(万亿)": 64.36}, "mcap": 52.93}, {"date": "2015-11-05", "value": 85.31, "type": "", "extra": {"A股总市值(万亿)": 54.91, "GDP(万亿)": 64.36}, "mcap": 54.91}, {"date": "2015-11-20", "value": 86.95, "type": "", "extra": {"A股总市值(万亿)": 55.96, "GDP(万亿)": 64.36}, "mcap": 55.96}, {"date": "2015-12-05", "value": 85.34, "type": "", "extra": {"A股总市值(万亿)": 54.93, "GDP(万亿)": 64.36}, "mcap": 54.93}, {"date": "2015-12-20", "value": 86.16, "type": "", "extra": {"A股总市值(万亿)": 55.45, "GDP(万亿)": 64.36}, "mcap": 55.45}, {"date": "2016-01-04", "value": 81.87, "type": "", "extra": {"A股总市值(万亿)": 52.69, "GDP(万亿)": 64.36}, "mcap": 52.69}, {"date": "2016-01-19", "value": 72.38, "type": "", "extra": {"A股总市值(万亿)": 49.86, "GDP(万亿)": 68.89}, "mcap": 49.86}, {"date": "2016-01-27", "value": 68.51, "type": "", "extra": {"A股总市值(万亿)": 47.2, "GDP(万亿)": 68.89}, "mcap": 47.2}, {"date": "2016-02-03", "value": 68.56, "type": "", "extra": {"A股总市值(万亿)": 47.23, "GDP(万亿)": 68.89}, "mcap": 47.23}, {"date": "2016-02-18", "value": 70.32, "type": "", "extra": {"A股总市值(万亿)": 48.44, "GDP(万亿)": 68.89}, "mcap": 48.44}, {"date": "2016-03-04", "value": 70.48, "type": "", "extra": {"A股总市值(万亿)": 48.55, "GDP(万亿)": 68.89}, "mcap": 48.55}, {"date": "2016-03-19", "value": 71.63, "type": "", "extra": {"A股总市值(万亿)": 49.35, "GDP(万亿)": 68.89}, "mcap": 49.35}, {"date": "2016-04-03", "value": 72.4, "type": "", "extra": {"A股总市值(万亿)": 49.88, "GDP(万亿)": 68.89}, "mcap": 49.88}, {"date": "2016-04-18", "value": 72.75, "type": "", "extra": {"A股总市值(万亿)": 50.11, "GDP(万亿)": 68.89}, "mcap": 50.11}, {"date": "2016-05-03", "value": 72.16, "type": "", "extra": {"A股总市值(万亿)": 49.71, "GDP(万亿)": 68.89}, "mcap": 49.71}, {"date": "2016-05-18", "value": 69.53, "type": "", "extra": {"A股总市值(万亿)": 47.9, "GDP(万亿)": 68.89}, "mcap": 47.9}, {"date": "2016-06-02", "value": 71.2, "type": "", "extra": {"A股总市值(万亿)": 49.05, "GDP(万亿)": 68.89}, "mcap": 49.05}, {"date": "2016-06-17", "value": 70.63, "type": "", "extra": {"A股总市值(万亿)": 48.66, "GDP(万亿)": 68.89}, "mcap": 48.66}, {"date": "2016-07-02", "value": 71.31, "type": "", "extra": {"A股总市值(万亿)": 49.12, "GDP(万亿)": 68.89}, "mcap": 49.12}, {"date": "2016-07-17", "value": 73.04, "type": "", "extra": {"A股总市值(万亿)": 50.32, "GDP(万亿)": 68.89}, "mcap": 50.32}, {"date": "2016-08-01", "value": 71.6, "type": "", "extra": {"A股总市值(万亿)": 49.33, "GDP(万亿)": 68.89}, "mcap": 49.33}, {"date": "2016-08-16", "value": 73.83, "type": "", "extra": {"A股总市值(万亿)": 50.86, "GDP(万亿)": 68.89}, "mcap": 50.86}, {"date": "2016-08-31", "value": 73.48, "type": "", "extra": {"A股总市值(万亿)": 50.62, "GDP(万亿)": 68.89}, "mcap": 50.62}, {"date": "2016-09-15", "value": 72.31, "type": "", "extra": {"A股总市值(万亿)": 49.81, "GDP(万亿)": 68.89}, "mcap": 49.81}, {"date": "2016-09-30", "value": 72.33, "type": "", "extra": {"A股总市值(万亿)": 49.83, "GDP(万亿)": 68.89}, "mcap": 49.83}, {"date": "2016-10-15", "value": 73.17, "type": "", "extra": {"A股总市值(万亿)": 50.41, "GDP(万亿)": 68.89}, "mcap": 50.41}, {"date": "2016-10-30", "value": 73.75, "type": "", "extra": {"A股总市值(万亿)": 50.81, "GDP(万亿)": 68.89}, "mcap": 50.81}, {"date": "2016-11-14", "value": 75.26, "type": "", "extra": {"A股总市值(万亿)": 51.85, "GDP(万亿)": 68.89}, "mcap": 51.85}, {"date": "2016-11-29", "value": 76.29, "type": "", "extra": {"A股总市值(万亿)": 52.56, "GDP(万亿)": 68.89}, "mcap": 52.56}, {"date": "2016-12-14", "value": 74.27, "type": "", "extra": {"A股总市值(万亿)": 51.16, "GDP(万亿)": 68.89}, "mcap": 51.16}, {"date": "2016-12-29", "value": 73.63, "type": "", "extra": {"A股总市值(万亿)": 50.73, "GDP(万亿)": 68.89}, "mcap": 50.73}, {"date": "2017-01-13", "value": 73.9, "type": "", "extra": {"A股总市值(万亿)": 50.91, "GDP(万亿)": 68.89}, "mcap": 50.91}, {"date": "2017-01-28", "value": 68.96, "type": "", "extra": {"A股总市值(万亿)": 51.47, "GDP(万亿)": 74.64}, "mcap": 51.47}, {"date": "2017-02-12", "value": 69.57, "type": "", "extra": {"A股总市值(万亿)": 51.93, "GDP(万亿)": 74.64}, "mcap": 51.93}, {"date": "2017-02-27", "value": 70.09, "type": "", "extra": {"A股总市值(万亿)": 52.32, "GDP(万亿)": 74.64}, "mcap": 52.32}, {"date": "2017-03-14", "value": 70.27, "type": "", "extra": {"A股总市值(万亿)": 52.45, "GDP(万亿)": 74.64}, "mcap": 52.45}, {"date": "2017-03-29", "value": 70.3, "type": "", "extra": {"A股总市值(万亿)": 52.47, "GDP(万亿)": 74.64}, "mcap": 52.47}, {"date": "2017-04-13", "value": 70.86, "type": "", "extra": {"A股总市值(万亿)": 52.89, "GDP(万亿)": 74.64}, "mcap": 52.89}, {"date": "2017-04-28", "value": 68.89, "type": "", "extra": {"A股总市值(万亿)": 51.42, "GDP(万亿)": 74.64}, "mcap": 51.42}, {"date": "2017-05-13", "value": 67.73, "type": "", "extra": {"A股总市值(万亿)": 50.56, "GDP(万亿)": 74.64}, "mcap": 50.56}, {"date": "2017-05-28", "value": 68.16, "type": "", "extra": {"A股总市值(万亿)": 50.88, "GDP(万亿)": 74.64}, "mcap": 50.88}, {"date": "2017-06-12", "value": 68.65, "type": "", "extra": {"A股总市值(万亿)": 51.24, "GDP(万亿)": 74.64}, "mcap": 51.24}, {"date": "2017-06-27", "value": 69.48, "type": "", "extra": {"A股总市值(万亿)": 51.86, "GDP(万亿)": 74.64}, "mcap": 51.86}, {"date": "2017-07-12", "value": 69.59, "type": "", "extra": {"A股总市值(万亿)": 51.94, "GDP(万亿)": 74.64}, "mcap": 51.94}, {"date": "2017-07-27", "value": 70.44, "type": "", "extra": {"A股总市值(万亿)": 52.57, "GDP(万亿)": 74.64}, "mcap": 52.57}, {"date": "2017-08-11", "value": 69.77, "type": "", "extra": {"A股总市值(万亿)": 52.07, "GDP(万亿)": 74.64}, "mcap": 52.07}, {"date": "2017-08-26", "value": 71.77, "type": "", "extra": {"A股总市值(万亿)": 53.57, "GDP(万亿)": 74.64}, "mcap": 53.57}, {"date": "2017-09-10", "value": 72.31, "type": "", "extra": {"A股总市值(万亿)": 53.97, "GDP(万亿)": 74.64}, "mcap": 53.97}, {"date": "2017-09-25", "value": 71.93, "type": "", "extra": {"A股总市值(万亿)": 53.69, "GDP(万亿)": 74.64}, "mcap": 53.69}, {"date": "2017-10-10", "value": 72.6, "type": "", "extra": {"A股总市值(万亿)": 54.19, "GDP(万亿)": 74.64}, "mcap": 54.19}, {"date": "2017-10-25", "value": 72.83, "type": "", "extra": {"A股总市值(万亿)": 54.36, "GDP(万亿)": 74.64}, "mcap": 54.36}, {"date": "2017-11-09", "value": 73.33, "type": "", "extra": {"A股总市值(万亿)": 54.73, "GDP(万亿)": 74.64}, "mcap": 54.73}, {"date": "2017-11-24", "value": 72.13, "type": "", "extra": {"A股总市值(万亿)": 53.84, "GDP(万亿)": 74.64}, "mcap": 53.84}, {"date": "2017-12-09", "value": 71.09, "type": "", "extra": {"A股总市值(万亿)": 53.06, "GDP(万亿)": 74.64}, "mcap": 53.06}, {"date": "2017-12-24", "value": 71.2, "type": "", "extra": {"A股总市值(万亿)": 53.15, "GDP(万亿)": 74.64}, "mcap": 53.15}, {"date": "2018-01-08", "value": 73.03, "type": "", "extra": {"A股总市值(万亿)": 54.51, "GDP(万亿)": 74.64}, "mcap": 54.51}, {"date": "2018-01-23", "value": 67.52, "type": "", "extra": {"A股总市值(万亿)": 56.17, "GDP(万亿)": 83.2}, "mcap": 56.17}, {"date": "2018-02-07", "value": 64.06, "type": "", "extra": {"A股总市值(万亿)": 53.3, "GDP(万亿)": 83.2}, "mcap": 53.3}, {"date": "2018-02-22", "value": 63.46, "type": "", "extra": {"A股总市值(万亿)": 52.8, "GDP(万亿)": 83.2}, "mcap": 52.8}, {"date": "2018-03-09", "value": 64.03, "type": "", "extra": {"A股总市值(万亿)": 53.27, "GDP(万亿)": 83.2}, "mcap": 53.27}, {"date": "2018-03-24", "value": 61.77, "type": "", "extra": {"A股总市值(万亿)": 51.4, "GDP(万亿)": 83.2}, "mcap": 51.4}, {"date": "2018-04-08", "value": 61.46, "type": "", "extra": {"A股总市值(万亿)": 51.13, "GDP(万亿)": 83.2}, "mcap": 51.13}, {"date": "2018-04-23", "value": 60.54, "type": "", "extra": {"A股总市值(万亿)": 50.37, "GDP(万亿)": 83.2}, "mcap": 50.37}, {"date": "2018-05-08", "value": 61.9, "type": "", "extra": {"A股总市值(万亿)": 51.5, "GDP(万亿)": 83.2}, "mcap": 51.5}, {"date": "2018-05-23", "value": 62.01, "type": "", "extra": {"A股总市值(万亿)": 51.59, "GDP(万亿)": 83.2}, "mcap": 51.59}, {"date": "2018-06-07", "value": 61.14, "type": "", "extra": {"A股总市值(万亿)": 50.87, "GDP(万亿)": 83.2}, "mcap": 50.87}, {"date": "2018-06-22", "value": 57.94, "type": "", "extra": {"A股总市值(万亿)": 48.2, "GDP(万亿)": 83.2}, "mcap": 48.2}, {"date": "2018-07-07", "value": 55.86, "type": "", "extra": {"A股总市值(万亿)": 46.47, "GDP(万亿)": 83.2}, "mcap": 46.47}, {"date": "2018-07-22", "value": 57.06, "type": "", "extra": {"A股总市值(万亿)": 47.47, "GDP(万亿)": 83.2}, "mcap": 47.47}, {"date": "2018-08-06", "value": 55.25, "type": "", "extra": {"A股总市值(万亿)": 45.96, "GDP(万亿)": 83.2}, "mcap": 45.96}, {"date": "2018-08-21", "value": 55.66, "type": "", "extra": {"A股总市值(万亿)": 46.31, "GDP(万亿)": 83.2}, "mcap": 46.31}, {"date": "2018-09-05", "value": 55.23, "type": "", "extra": {"A股总市值(万亿)": 45.95, "GDP(万亿)": 83.2}, "mcap": 45.95}, {"date": "2018-09-20", "value": 55.6, "type": "", "extra": {"A股总市值(万亿)": 46.26, "GDP(万亿)": 83.2}, "mcap": 46.26}, {"date": "2018-10-05", "value": 56.94, "type": "", "extra": {"A股总市值(万亿)": 47.37, "GDP(万亿)": 83.2}, "mcap": 47.37}, {"date": "2018-10-20", "value": 52.99, "type": "", "extra": {"A股总市值(万亿)": 44.09, "GDP(万亿)": 83.2}, "mcap": 44.09}, {"date": "2018-11-04", "value": 54.83, "type": "", "extra": {"A股总市值(万亿)": 45.62, "GDP(万亿)": 83.2}, "mcap": 45.62}, {"date": "2018-11-19", "value": 55.22, "type": "", "extra": {"A股总市值(万亿)": 45.94, "GDP(万亿)": 83.2}, "mcap": 45.94}, {"date": "2018-12-04", "value": 54.67, "type": "", "extra": {"A股总市值(万亿)": 45.49, "GDP(万亿)": 83.2}, "mcap": 45.49}, {"date": "2018-12-19", "value": 52.98, "type": "", "extra": {"A股总市值(万亿)": 44.08, "GDP(万亿)": 83.2}, "mcap": 44.08}, {"date": "2019-01-03", "value": 51.32, "type": "", "extra": {"A股总市值(万亿)": 42.7, "GDP(万亿)": 83.2}, "mcap": 42.7}, {"date": "2019-01-04", "value": 52.76, "type": "熊市底部(2440)", "extra": {"A股总市值(万亿)": 43.9, "GDP(万亿)": 83.2}, "mcap": 43.9}, {"date": "2019-01-18", "value": 51.05, "type": "", "extra": {"A股总市值(万亿)": 46.93, "GDP(万亿)": 91.93}, "mcap": 46.93}, {"date": "2019-02-02", "value": 51.95, "type": "", "extra": {"A股总市值(万亿)": 47.76, "GDP(万亿)": 91.93}, "mcap": 47.76}, {"date": "2019-02-17", "value": 54.56, "type": "", "extra": {"A股总市值(万亿)": 50.16, "GDP(万亿)": 91.93}, "mcap": 50.16}, {"date": "2019-03-04", "value": 68.59, "type": "", "extra": {"A股总市值(万亿)": 63.06, "GDP(万亿)": 91.93}, "mcap": 63.06}, {"date": "2019-03-19", "value": 71.17, "type": "", "extra": {"A股总市值(万亿)": 65.42, "GDP(万亿)": 91.93}, "mcap": 65.42}, {"date": "2019-04-03", "value": 76.26, "type": "", "extra": {"A股总市值(万亿)": 70.11, "GDP(万亿)": 91.93}, "mcap": 70.11}, {"date": "2019-04-18", "value": 77.64, "type": "", "extra": {"A股总市值(万亿)": 71.37, "GDP(万亿)": 91.93}, "mcap": 71.37}, {"date": "2019-05-03", "value": 70.65, "type": "", "extra": {"A股总市值(万亿)": 64.95, "GDP(万亿)": 91.93}, "mcap": 64.95}, {"date": "2019-05-18", "value": 62.69, "type": "", "extra": {"A股总市值(万亿)": 57.63, "GDP(万亿)": 91.93}, "mcap": 57.63}, {"date": "2019-06-02", "value": 63.35, "type": "", "extra": {"A股总市值(万亿)": 58.24, "GDP(万亿)": 91.93}, "mcap": 58.24}, {"date": "2019-06-17", "value": 62.9, "type": "", "extra": {"A股总市值(万亿)": 57.83, "GDP(万亿)": 91.93}, "mcap": 57.83}, {"date": "2019-07-02", "value": 69.26, "type": "", "extra": {"A股总市值(万亿)": 63.67, "GDP(万亿)": 91.93}, "mcap": 63.67}, {"date": "2019-07-17", "value": 64.69, "type": "", "extra": {"A股总市值(万亿)": 59.47, "GDP(万亿)": 91.93}, "mcap": 59.47}, {"date": "2019-08-01", "value": 63.76, "type": "", "extra": {"A股总市值(万亿)": 58.62, "GDP(万亿)": 91.93}, "mcap": 58.62}, {"date": "2019-08-16", "value": 60.31, "type": "", "extra": {"A股总市值(万亿)": 55.44, "GDP(万亿)": 91.93}, "mcap": 55.44}, {"date": "2019-08-31", "value": 62.85, "type": "", "extra": {"A股总市值(万亿)": 57.77, "GDP(万亿)": 91.93}, "mcap": 57.77}, {"date": "2019-09-15", "value": 68.74, "type": "", "extra": {"A股总市值(万亿)": 63.19, "GDP(万亿)": 91.93}, "mcap": 63.19}, {"date": "2019-09-30", "value": 63.62, "type": "", "extra": {"A股总市值(万亿)": 58.48, "GDP(万亿)": 91.93}, "mcap": 58.48}, {"date": "2019-10-15", "value": 67.11, "type": "", "extra": {"A股总市值(万亿)": 61.69, "GDP(万亿)": 91.93}, "mcap": 61.69}, {"date": "2019-10-30", "value": 65.0, "type": "", "extra": {"A股总市值(万亿)": 59.76, "GDP(万亿)": 91.93}, "mcap": 59.76}, {"date": "2019-11-14", "value": 63.81, "type": "", "extra": {"A股总市值(万亿)": 58.66, "GDP(万亿)": 91.93}, "mcap": 58.66}, {"date": "2019-11-29", "value": 62.27, "type": "", "extra": {"A股总市值(万亿)": 57.24, "GDP(万亿)": 91.93}, "mcap": 57.24}, {"date": "2019-12-14", "value": 66.16, "type": "", "extra": {"A股总市值(万亿)": 60.82, "GDP(万亿)": 91.93}, "mcap": 60.82}, {"date": "2019-12-29", "value": 67.67, "type": "", "extra": {"A股总市值(万亿)": 62.21, "GDP(万亿)": 91.93}, "mcap": 62.21}, {"date": "2020-01-13", "value": 72.17, "type": "", "extra": {"A股总市值(万亿)": 66.34, "GDP(万亿)": 91.93}, "mcap": 66.34}, {"date": "2020-01-28", "value": 61.99, "type": "", "extra": {"A股总市值(万亿)": 61.15, "GDP(万亿)": 98.65}, "mcap": 61.15}, {"date": "2020-02-12", "value": 60.11, "type": "", "extra": {"A股总市值(万亿)": 59.29, "GDP(万亿)": 98.65}, "mcap": 59.29}, {"date": "2020-02-27", "value": 62.55, "type": "", "extra": {"A股总市值(万亿)": 61.7, "GDP(万亿)": 98.65}, "mcap": 61.7}, {"date": "2020-03-13", "value": 58.61, "type": "", "extra": {"A股总市值(万亿)": 57.82, "GDP(万亿)": 98.65}, "mcap": 57.82}, {"date": "2020-03-28", "value": 54.25, "type": "", "extra": {"A股总市值(万亿)": 53.51, "GDP(万亿)": 98.65}, "mcap": 53.51}, {"date": "2020-04-12", "value": 55.17, "type": "", "extra": {"A股总市值(万亿)": 54.43, "GDP(万亿)": 98.65}, "mcap": 54.43}, {"date": "2020-04-27", "value": 55.89, "type": "", "extra": {"A股总市值(万亿)": 55.13, "GDP(万亿)": 98.65}, "mcap": 55.13}, {"date": "2020-05-12", "value": 58.77, "type": "", "extra": {"A股总市值(万亿)": 57.97, "GDP(万亿)": 98.65}, "mcap": 57.97}, {"date": "2020-05-27", "value": 56.69, "type": "", "extra": {"A股总市值(万亿)": 55.93, "GDP(万亿)": 98.65}, "mcap": 55.93}, {"date": "2020-06-11", "value": 59.88, "type": "", "extra": {"A股总市值(万亿)": 59.07, "GDP(万亿)": 98.65}, "mcap": 59.07}, {"date": "2020-06-26", "value": 62.1, "type": "", "extra": {"A股总市值(万亿)": 61.26, "GDP(万亿)": 98.65}, "mcap": 61.26}, {"date": "2020-07-11", "value": 77.39, "type": "", "extra": {"A股总市值(万亿)": 76.35, "GDP(万亿)": 98.65}, "mcap": 76.35}, {"date": "2020-07-26", "value": 70.33, "type": "", "extra": {"A股总市值(万亿)": 69.38, "GDP(万亿)": 98.65}, "mcap": 69.38}, {"date": "2020-08-10", "value": 77.24, "type": "", "extra": {"A股总市值(万亿)": 76.19, "GDP(万亿)": 98.65}, "mcap": 76.19}, {"date": "2020-08-25", "value": 77.02, "type": "", "extra": {"A股总市值(万亿)": 75.98, "GDP(万亿)": 98.65}, "mcap": 75.98}, {"date": "2020-09-09", "value": 72.52, "type": "", "extra": {"A股总市值(万亿)": 71.54, "GDP(万亿)": 98.65}, "mcap": 71.54}, {"date": "2020-09-24", "value": 71.33, "type": "", "extra": {"A股总市值(万亿)": 70.36, "GDP(万亿)": 98.65}, "mcap": 70.36}, {"date": "2020-10-09", "value": 73.18, "type": "", "extra": {"A股总市值(万亿)": 72.19, "GDP(万亿)": 98.65}, "mcap": 72.19}, {"date": "2020-10-24", "value": 73.4, "type": "", "extra": {"A股总市值(万亿)": 72.41, "GDP(万亿)": 98.65}, "mcap": 72.41}, {"date": "2020-11-08", "value": 74.7, "type": "", "extra": {"A股总市值(万亿)": 73.69, "GDP(万亿)": 98.65}, "mcap": 73.69}, {"date": "2020-11-23", "value": 78.57, "type": "", "extra": {"A股总市值(万亿)": 77.51, "GDP(万亿)": 98.65}, "mcap": 77.51}, {"date": "2020-12-08", "value": 78.41, "type": "", "extra": {"A股总市值(万亿)": 77.35, "GDP(万亿)": 98.65}, "mcap": 77.35}, {"date": "2020-12-23", "value": 77.35, "type": "", "extra": {"A股总市值(万亿)": 76.31, "GDP(万亿)": 98.65}, "mcap": 76.31}, {"date": "2021-01-07", "value": 88.44, "type": "", "extra": {"A股总市值(万亿)": 87.25, "GDP(万亿)": 98.65}, "mcap": 87.25}, {"date": "2021-01-22", "value": 88.28, "type": "", "extra": {"A股总市值(万亿)": 89.48, "GDP(万亿)": 101.36}, "mcap": 89.48}, {"date": "2021-02-06", "value": 80.31, "type": "", "extra": {"A股总市值(万亿)": 81.4, "GDP(万亿)": 101.36}, "mcap": 81.4}, {"date": "2021-02-18", "value": 93.24, "type": "牛市顶点(3731)", "extra": {"A股总市值(万亿)": 94.5, "GDP(万亿)": 101.36}, "mcap": 94.5}, {"date": "2021-02-21", "value": 94.74, "type": "", "extra": {"A股总市值(万亿)": 96.03, "GDP(万亿)": 101.36}, "mcap": 96.03}, {"date": "2021-03-08", "value": 74.9, "type": "", "extra": {"A股总市值(万亿)": 75.92, "GDP(万亿)": 101.36}, "mcap": 75.92}, {"date": "2021-03-23", "value": 74.19, "type": "", "extra": {"A股总市值(万亿)": 75.19, "GDP(万亿)": 101.36}, "mcap": 75.19}, {"date": "2021-04-07", "value": 79.1, "type": "", "extra": {"A股总市值(万亿)": 80.18, "GDP(万亿)": 101.36}, "mcap": 80.18}, {"date": "2021-04-22", "value": 78.06, "type": "", "extra": {"A股总市值(万亿)": 79.12, "GDP(万亿)": 101.36}, "mcap": 79.12}, {"date": "2021-05-07", "value": 74.72, "type": "", "extra": {"A股总市值(万亿)": 75.73, "GDP(万亿)": 101.36}, "mcap": 75.73}, {"date": "2021-05-22", "value": 79.6, "type": "", "extra": {"A股总市值(万亿)": 80.69, "GDP(万亿)": 101.36}, "mcap": 80.69}, {"date": "2021-06-06", "value": 87.21, "type": "", "extra": {"A股总市值(万亿)": 88.39, "GDP(万亿)": 101.36}, "mcap": 88.39}, {"date": "2021-06-21", "value": 82.68, "type": "", "extra": {"A股总市值(万亿)": 83.81, "GDP(万亿)": 101.36}, "mcap": 83.81}, {"date": "2021-07-06", "value": 82.76, "type": "", "extra": {"A股总市值(万亿)": 83.89, "GDP(万亿)": 101.36}, "mcap": 83.89}, {"date": "2021-07-21", "value": 85.1, "type": "", "extra": {"A股总市值(万亿)": 86.26, "GDP(万亿)": 101.36}, "mcap": 86.26}, {"date": "2021-08-05", "value": 78.16, "type": "", "extra": {"A股总市值(万亿)": 79.22, "GDP(万亿)": 101.36}, "mcap": 79.22}, {"date": "2021-08-20", "value": 75.33, "type": "", "extra": {"A股总市值(万亿)": 76.35, "GDP(万亿)": 101.36}, "mcap": 76.35}, {"date": "2021-09-04", "value": 86.48, "type": "", "extra": {"A股总市值(万亿)": 87.65, "GDP(万亿)": 101.36}, "mcap": 87.65}, {"date": "2021-09-19", "value": 88.8, "type": "", "extra": {"A股总市值(万亿)": 90.01, "GDP(万亿)": 101.36}, "mcap": 90.01}, {"date": "2021-10-04", "value": 85.5, "type": "", "extra": {"A股总市值(万亿)": 86.66, "GDP(万亿)": 101.36}, "mcap": 86.66}, {"date": "2021-10-19", "value": 87.3, "type": "", "extra": {"A股总市值(万亿)": 88.49, "GDP(万亿)": 101.36}, "mcap": 88.49}, {"date": "2021-11-03", "value": 80.47, "type": "", "extra": {"A股总市值(万亿)": 81.56, "GDP(万亿)": 101.36}, "mcap": 81.56}, {"date": "2021-11-18", "value": 82.07, "type": "", "extra": {"A股总市值(万亿)": 83.19, "GDP(万亿)": 101.36}, "mcap": 83.19}, {"date": "2021-12-03", "value": 88.33, "type": "", "extra": {"A股总市值(万亿)": 89.53, "GDP(万亿)": 101.36}, "mcap": 89.53}, {"date": "2021-12-18", "value": 90.13, "type": "", "extra": {"A股总市值(万亿)": 91.36, "GDP(万亿)": 101.36}, "mcap": 91.36}, {"date": "2022-01-02", "value": 90.67, "type": "", "extra": {"A股总市值(万亿)": 91.9, "GDP(万亿)": 101.36}, "mcap": 91.9}, {"date": "2022-01-17", "value": 78.43, "type": "", "extra": {"A股总市值(万亿)": 90.13, "GDP(万亿)": 114.92}, "mcap": 90.13}, {"date": "2022-02-01", "value": 75.6, "type": "", "extra": {"A股总市值(万亿)": 86.88, "GDP(万亿)": 114.92}, "mcap": 86.88}, {"date": "2022-02-16", "value": 77.24, "type": "", "extra": {"A股总市值(万亿)": 88.76, "GDP(万亿)": 114.92}, "mcap": 88.76}, {"date": "2022-03-03", "value": 77.48, "type": "", "extra": {"A股总市值(万亿)": 89.04, "GDP(万亿)": 114.92}, "mcap": 89.04}, {"date": "2022-03-18", "value": 73.87, "type": "", "extra": {"A股总市值(万亿)": 84.89, "GDP(万亿)": 114.92}, "mcap": 84.89}, {"date": "2022-04-02", "value": 74.37, "type": "", "extra": {"A股总市值(万亿)": 85.46, "GDP(万亿)": 114.92}, "mcap": 85.46}, {"date": "2022-04-17", "value": 73.25, "type": "", "extra": {"A股总市值(万亿)": 84.18, "GDP(万亿)": 114.92}, "mcap": 84.18}, {"date": "2022-05-02", "value": 70.67, "type": "", "extra": {"A股总市值(万亿)": 81.22, "GDP(万亿)": 114.92}, "mcap": 81.22}, {"date": "2022-05-17", "value": 71.4, "type": "", "extra": {"A股总市值(万亿)": 82.06, "GDP(万亿)": 114.92}, "mcap": 82.06}, {"date": "2022-06-01", "value": 72.79, "type": "", "extra": {"A股总市值(万亿)": 83.65, "GDP(万亿)": 114.92}, "mcap": 83.65}, {"date": "2022-06-16", "value": 74.41, "type": "", "extra": {"A股总市值(万亿)": 85.51, "GDP(万亿)": 114.92}, "mcap": 85.51}, {"date": "2022-07-01", "value": 76.01, "type": "", "extra": {"A股总市值(万亿)": 87.36, "GDP(万亿)": 114.92}, "mcap": 87.36}, {"date": "2022-07-16", "value": 73.51, "type": "", "extra": {"A股总市值(万亿)": 84.48, "GDP(万亿)": 114.92}, "mcap": 84.48}, {"date": "2022-07-31", "value": 73.91, "type": "", "extra": {"A股总市值(万亿)": 84.93, "GDP(万亿)": 114.92}, "mcap": 84.93}, {"date": "2022-08-15", "value": 74.26, "type": "", "extra": {"A股总市值(万亿)": 85.34, "GDP(万亿)": 114.92}, "mcap": 85.34}, {"date": "2022-08-30", "value": 73.5, "type": "", "extra": {"A股总市值(万亿)": 84.46, "GDP(万亿)": 114.92}, "mcap": 84.46}, {"date": "2022-09-14", "value": 73.66, "type": "", "extra": {"A股总市值(万亿)": 84.65, "GDP(万亿)": 114.92}, "mcap": 84.65}, {"date": "2022-09-29", "value": 70.58, "type": "", "extra": {"A股总市值(万亿)": 81.11, "GDP(万亿)": 114.92}, "mcap": 81.11}, {"date": "2022-10-14", "value": 71.06, "type": "", "extra": {"A股总市值(万亿)": 81.67, "GDP(万亿)": 114.92}, "mcap": 81.67}, {"date": "2022-10-29", "value": 68.62, "type": "", "extra": {"A股总市值(万亿)": 78.85, "GDP(万亿)": 114.92}, "mcap": 78.85}, {"date": "2022-11-13", "value": 71.3, "type": "", "extra": {"A股总市值(万亿)": 81.94, "GDP(万亿)": 114.92}, "mcap": 81.94}, {"date": "2022-11-28", "value": 71.17, "type": "", "extra": {"A股总市值(万亿)": 81.78, "GDP(万亿)": 114.92}, "mcap": 81.78}, {"date": "2022-12-13", "value": 72.7, "type": "", "extra": {"A股总市值(万亿)": 83.55, "GDP(万亿)": 114.92}, "mcap": 83.55}, {"date": "2022-12-28", "value": 71.3, "type": "", "extra": {"A股总市值(万亿)": 81.94, "GDP(万亿)": 114.92}, "mcap": 81.94}, {"date": "2023-01-12", "value": 72.5, "type": "", "extra": {"A股总市值(万亿)": 83.31, "GDP(万亿)": 114.92}, "mcap": 83.31}, {"date": "2023-01-27", "value": 70.35, "type": "", "extra": {"A股总市值(万亿)": 85.14, "GDP(万亿)": 121.02}, "mcap": 85.14}, {"date": "2023-02-11", "value": 70.29, "type": "", "extra": {"A股总市值(万亿)": 85.07, "GDP(万亿)": 121.02}, "mcap": 85.07}, {"date": "2023-02-26", "value": 70.39, "type": "", "extra": {"A股总市值(万亿)": 85.18, "GDP(万亿)": 121.02}, "mcap": 85.18}, {"date": "2023-03-13", "value": 70.41, "type": "", "extra": {"A股总市值(万亿)": 85.21, "GDP(万亿)": 121.02}, "mcap": 85.21}, {"date": "2023-03-28", "value": 70.06, "type": "", "extra": {"A股总市值(万亿)": 84.79, "GDP(万亿)": 121.02}, "mcap": 84.79}, {"date": "2023-04-12", "value": 71.28, "type": "", "extra": {"A股总市值(万亿)": 86.27, "GDP(万亿)": 121.02}, "mcap": 86.27}, {"date": "2023-04-27", "value": 75.02, "type": "", "extra": {"A股总市值(万亿)": 85.52, "GDP(万亿)": 114.0}, "mcap": 85.52}, {"date": "2023-05-12", "value": 74.8, "type": "", "extra": {"A股总市值(万亿)": 85.28, "GDP(万亿)": 114.0}, "mcap": 85.28}, {"date": "2023-05-27", "value": 73.86, "type": "", "extra": {"A股总市值(万亿)": 84.2, "GDP(万亿)": 114.0}, "mcap": 84.2}, {"date": "2023-06-11", "value": 74.16, "type": "", "extra": {"A股总市值(万亿)": 84.54, "GDP(万亿)": 114.0}, "mcap": 84.54}, {"date": "2023-06-26", "value": 72.88, "type": "", "extra": {"A股总市值(万亿)": 83.08, "GDP(万亿)": 114.0}, "mcap": 83.08}, {"date": "2023-07-11", "value": 74.0, "type": "", "extra": {"A股总市值(万亿)": 84.36, "GDP(万亿)": 114.0}, "mcap": 84.36}, {"date": "2023-07-26", "value": 71.13, "type": "", "extra": {"A股总市值(万亿)": 84.39, "GDP(万亿)": 118.64}, "mcap": 84.39}, {"date": "2023-08-10", "value": 71.61, "type": "", "extra": {"A股总市值(万亿)": 84.96, "GDP(万亿)": 118.64}, "mcap": 84.96}, {"date": "2023-08-25", "value": 68.71, "type": "", "extra": {"A股总市值(万亿)": 81.52, "GDP(万亿)": 118.64}, "mcap": 81.52}, {"date": "2023-09-09", "value": 69.51, "type": "", "extra": {"A股总市值(万亿)": 82.47, "GDP(万亿)": 118.64}, "mcap": 82.47}, {"date": "2023-09-24", "value": 69.75, "type": "", "extra": {"A股总市值(万亿)": 82.75, "GDP(万亿)": 118.64}, "mcap": 82.75}, {"date": "2023-10-09", "value": 69.21, "type": "", "extra": {"A股总市值(万亿)": 82.11, "GDP(万亿)": 118.64}, "mcap": 82.11}, {"date": "2023-10-24", "value": 66.32, "type": "", "extra": {"A股总市值(万亿)": 79.69, "GDP(万亿)": 120.16}, "mcap": 79.69}, {"date": "2023-11-08", "value": 67.67, "type": "", "extra": {"A股总市值(万亿)": 81.31, "GDP(万亿)": 120.16}, "mcap": 81.31}, {"date": "2023-11-23", "value": 67.81, "type": "", "extra": {"A股总市值(万亿)": 81.48, "GDP(万亿)": 120.16}, "mcap": 81.48}, {"date": "2023-12-08", "value": 66.43, "type": "", "extra": {"A股总市值(万亿)": 79.82, "GDP(万亿)": 120.16}, "mcap": 79.82}, {"date": "2023-12-23", "value": 65.61, "type": "", "extra": {"A股总市值(万亿)": 78.83, "GDP(万亿)": 120.16}, "mcap": 78.83}, {"date": "2024-01-07", "value": 65.82, "type": "", "extra": {"A股总市值(万亿)": 79.09, "GDP(万亿)": 120.16}, "mcap": 79.09}, {"date": "2024-01-22", "value": 60.27, "type": "", "extra": {"A股总市值(万亿)": 75.98, "GDP(万亿)": 126.06}, "mcap": 75.98}, {"date": "2024-02-05", "value": 59.5, "type": "熊市底部(2635)", "extra": {"A股总市值(万亿)": 75.0, "GDP(万亿)": 126.06}, "mcap": 75.0}, {"date": "2024-02-06", "value": 61.17, "type": "", "extra": {"A股总市值(万亿)": 77.11, "GDP(万亿)": 126.06}, "mcap": 77.11}, {"date": "2024-02-21", "value": 64.26, "type": "", "extra": {"A股总市值(万亿)": 81.0, "GDP(万亿)": 126.06}, "mcap": 81.0}, {"date": "2024-03-07", "value": 65.72, "type": "", "extra": {"A股总市值(万亿)": 82.85, "GDP(万亿)": 126.06}, "mcap": 82.85}, {"date": "2024-03-22", "value": 66.11, "type": "", "extra": {"A股总市值(万亿)": 83.34, "GDP(万亿)": 126.06}, "mcap": 83.34}, {"date": "2024-04-06", "value": 66.52, "type": "", "extra": {"A股总市值(万亿)": 83.86, "GDP(万亿)": 126.06}, "mcap": 83.86}, {"date": "2024-04-21", "value": 70.67, "type": "", "extra": {"A股总市值(万亿)": 83.76, "GDP(万亿)": 118.52}, "mcap": 83.76}, {"date": "2024-05-06", "value": 72.21, "type": "", "extra": {"A股总市值(万亿)": 85.58, "GDP(万亿)": 118.52}, "mcap": 85.58}, {"date": "2024-05-21", "value": 72.56, "type": "", "extra": {"A股总市值(万亿)": 86.0, "GDP(万亿)": 118.52}, "mcap": 86.0}, {"date": "2024-06-05", "value": 70.67, "type": "", "extra": {"A股总市值(万亿)": 83.76, "GDP(万亿)": 118.52}, "mcap": 83.76}, {"date": "2024-06-20", "value": 69.45, "type": "", "extra": {"A股总市值(万亿)": 82.32, "GDP(万亿)": 118.52}, "mcap": 82.32}, {"date": "2024-07-05", "value": 68.32, "type": "", "extra": {"A股总市值(万亿)": 80.98, "GDP(万亿)": 118.52}, "mcap": 80.98}, {"date": "2024-07-20", "value": 66.28, "type": "", "extra": {"A股总市值(万亿)": 81.76, "GDP(万亿)": 123.36}, "mcap": 81.76}, {"date": "2024-08-04", "value": 64.77, "type": "", "extra": {"A股总市值(万亿)": 79.9, "GDP(万亿)": 123.36}, "mcap": 79.9}, {"date": "2024-08-19", "value": 64.54, "type": "", "extra": {"A股总市值(万亿)": 79.62, "GDP(万亿)": 123.36}, "mcap": 79.62}, {"date": "2024-09-03", "value": 62.77, "type": "", "extra": {"A股总市值(万亿)": 77.43, "GDP(万亿)": 123.36}, "mcap": 77.43}, {"date": "2024-09-18", "value": 61.09, "type": "", "extra": {"A股总市值(万亿)": 75.36, "GDP(万亿)": 123.36}, "mcap": 75.36}, {"date": "2024-10-03", "value": 73.2, "type": "", "extra": {"A股总市值(万亿)": 90.3, "GDP(万亿)": 123.36}, "mcap": 90.3}, {"date": "2024-10-08", "value": 76.2, "type": "", "extra": {"A股总市值(万亿)": 94.0, "GDP(万亿)": 123.36}, "mcap": 94.0}, {"date": "2024-10-18", "value": 67.67, "type": "", "extra": {"A股总市值(万亿)": 83.48, "GDP(万亿)": 123.36}, "mcap": 83.48}, {"date": "2024-11-02", "value": 65.18, "type": "", "extra": {"A股总市值(万亿)": 82.53, "GDP(万亿)": 126.63}, "mcap": 82.53}, {"date": "2024-11-17", "value": 68.37, "type": "", "extra": {"A股总市值(万亿)": 86.58, "GDP(万亿)": 126.63}, "mcap": 86.58}, {"date": "2024-12-02", "value": 70.34, "type": "", "extra": {"A股总市值(万亿)": 89.07, "GDP(万亿)": 126.63}, "mcap": 89.07}, {"date": "2024-12-17", "value": 69.06, "type": "", "extra": {"A股总市值(万亿)": 87.45, "GDP(万亿)": 126.63}, "mcap": 87.45}, {"date": "2025-01-01", "value": 67.06, "type": "", "extra": {"A股总市值(万亿)": 84.92, "GDP(万亿)": 126.63}, "mcap": 84.92}, {"date": "2025-01-16", "value": 63.32, "type": "", "extra": {"A股总市值(万亿)": 80.19, "GDP(万亿)": 126.63}, "mcap": 80.19}, {"date": "2025-01-31", "value": 59.75, "type": "", "extra": {"A股总市值(万亿)": 80.6, "GDP(万亿)": 134.91}, "mcap": 80.6}, {"date": "2025-02-15", "value": 65.14, "type": "", "extra": {"A股总市值(万亿)": 87.88, "GDP(万亿)": 134.91}, "mcap": 87.88}, {"date": "2025-03-02", "value": 64.43, "type": "", "extra": {"A股总市值(万亿)": 86.93, "GDP(万亿)": 134.91}, "mcap": 86.93}, {"date": "2025-03-17", "value": 68.93, "type": "", "extra": {"A股总市值(万亿)": 92.99, "GDP(万亿)": 134.91}, "mcap": 92.99}, {"date": "2025-04-01", "value": 64.54, "type": "", "extra": {"A股总市值(万亿)": 87.07, "GDP(万亿)": 134.91}, "mcap": 87.07}, {"date": "2025-04-16", "value": 59.22, "type": "", "extra": {"A股总市值(万亿)": 79.89, "GDP(万亿)": 134.91}, "mcap": 79.89}, {"date": "2025-05-01", "value": 63.91, "type": "", "extra": {"A股总市值(万亿)": 81.47, "GDP(万亿)": 127.48}, "mcap": 81.47}, {"date": "2025-05-16", "value": 67.84, "type": "", "extra": {"A股总市值(万亿)": 86.49, "GDP(万亿)": 127.48}, "mcap": 86.49}, {"date": "2025-05-31", "value": 67.0, "type": "", "extra": {"A股总市值(万亿)": 85.41, "GDP(万亿)": 127.48}, "mcap": 85.41}, {"date": "2025-06-15", "value": 68.49, "type": "", "extra": {"A股总市值(万亿)": 87.31, "GDP(万亿)": 127.48}, "mcap": 87.31}, {"date": "2025-06-30", "value": 72.12, "type": "", "extra": {"A股总市值(万亿)": 91.93, "GDP(万亿)": 127.48}, "mcap": 91.93}, {"date": "2025-07-15", "value": 74.66, "type": "", "extra": {"A股总市值(万亿)": 95.17, "GDP(万亿)": 127.48}, "mcap": 95.17}, {"date": "2025-07-30", "value": 79.52, "type": "", "extra": {"A股总市值(万亿)": 101.38, "GDP(万亿)": 127.48}, "mcap": 101.38}, {"date": "2025-08-14", "value": 82.25, "type": "", "extra": {"A股总市值(万亿)": 104.85, "GDP(万亿)": 127.48}, "mcap": 104.85}, {"date": "2025-08-29", "value": 91.62, "type": "", "extra": {"A股总市值(万亿)": 116.8, "GDP(万亿)": 127.48}, "mcap": 116.8}, {"date": "2025-09-13", "value": 92.45, "type": "", "extra": {"A股总市值(万亿)": 117.86, "GDP(万亿)": 127.48}, "mcap": 117.86}, {"date": "2025-09-28", "value": 91.87, "type": "", "extra": {"A股总市值(万亿)": 117.12, "GDP(万亿)": 127.48}, "mcap": 117.12}, {"date": "2025-10-13", "value": 93.58, "type": "", "extra": {"A股总市值(万亿)": 119.3, "GDP(万亿)": 127.48}, "mcap": 119.3}, {"date": "2025-10-28", "value": 96.43, "type": "", "extra": {"A股总市值(万亿)": 122.93, "GDP(万亿)": 127.48}, "mcap": 122.93}, {"date": "2025-11-12", "value": 96.38, "type": "", "extra": {"A股总市值(万亿)": 122.87, "GDP(万亿)": 127.48}, "mcap": 122.87}, {"date": "2025-11-27", "value": 91.56, "type": "", "extra": {"A股总市值(万亿)": 116.72, "GDP(万亿)": 127.48}, "mcap": 116.72}, {"date": "2025-12-12", "value": 93.16, "type": "", "extra": {"A股总市值(万亿)": 118.75, "GDP(万亿)": 127.48}, "mcap": 118.75}, {"date": "2025-12-27", "value": 96.72, "type": "", "extra": {"A股总市值(万亿)": 123.3, "GDP(万亿)": 127.48}, "mcap": 123.3}, {"date": "2026-01-11", "value": 94.68, "type": "", "extra": {"A股总市值(万亿)": 120.7, "GDP(万亿)": 127.48}, "mcap": 120.7}, {"date": "2026-01-26", "value": 85.11, "type": "", "extra": {"A股总市值(万亿)": 120.0, "GDP(万亿)": 141.0}, "mcap": 120.0}, {"date": "2026-02-10", "value": 85.26, "type": "", "extra": {"A股总市值(万亿)": 120.22, "GDP(万亿)": 141.0}, "mcap": 120.22}, {"date": "2026-02-25", "value": 84.86, "type": "", "extra": {"A股总市值(万亿)": 119.65, "GDP(万亿)": 141.0}, "mcap": 119.65}, {"date": "2026-03-12", "value": 85.09, "type": "", "extra": {"A股总市值(万亿)": 119.98, "GDP(万亿)": 141.0}, "mcap": 119.98}, {"date": "2026-03-27", "value": 87.14, "type": "", "extra": {"A股总市值(万亿)": 122.87, "GDP(万亿)": 141.0}, "mcap": 122.87}, {"date": "2026-04-11", "value": 86.28, "type": "", "extra": {"A股总市值(万亿)": 121.66, "GDP(万亿)": 141.0}, "mcap": 121.66}, {"date": "2026-04-26", "value": 85.2, "type": "", "extra": {"A股总市值(万亿)": 120.13, "GDP(万亿)": 141.0}, "mcap": 120.13}, {"date": "2026-05-11", "value": 83.25, "type": "", "extra": {"A股总市值(万亿)": 117.38, "GDP(万亿)": 141.0}, "mcap": 117.38}, {"date": "2026-05-26", "value": 83.98, "type": "", "extra": {"A股总市值(万亿)": 118.41, "GDP(万亿)": 141.0}, "mcap": 118.41}, {"date": "2026-06-10", "value": 85.99, "type": "", "extra": {"A股总市值(万亿)": 121.25, "GDP(万亿)": 141.0}, "mcap": 121.25}, {"date": "2026-06-25", "value": 84.08, "type": "", "extra": {"A股总市值(万亿)": 118.55, "GDP(万亿)": 141.0}, "mcap": 118.55}, {"date": "2026-07-10", "value": 81.87, "type": "", "extra": {"A股总市值(万亿)": 115.44, "GDP(万亿)": 141.0}, "mcap": 115.44}, {"date": "2026-07-25", "value": 77.63, "type": "", "extra": {"A股总市值(万亿)": 109.46, "GDP(万亿)": 141.0}, "mcap": 109.46}, {"date": "2026-08-01", "value": 77.86, "type": "当前", "extra": {"A股总市值(万亿)": 109.78, "GDP(万亿)": 141.0}, "mcap": 109.78}];
@@ -185,6 +342,36 @@ function linearSlope(vals) {
   return den === 0 ? 0 : (n * sxy - sx * sy) / den;
 }
 
+// ---------- 主题系统（深浅两套，仅影响视觉） ----------
+const THEMES = {
+  dark: {
+    tooltipBg: 'rgba(13,18,24,.97)', tooltipBorder: 'rgba(148,172,200,.25)', tooltipText: '#e6ebf2',
+    axisLabel: '#94a0af', axisLine: 'rgba(148,172,200,.18)', splitLine: 'rgba(148,172,200,.08)',
+    legendText: '#94a0af', legendInactive: '#3c4754',
+    markLineColor: '#414d5c', markLineLabel: '#6b7686', markAreaLabel: '#6b7686',
+    markPointLabel: '#aab4c2',
+    dzBorder: '#26303c', dzFill: 'rgba(61,139,253,.16)', dzHandle: '#3d8bfd', dzText: '#8b95a5',
+    zoneColors: ['rgba(39,174,96,.17)', 'rgba(47,128,237,.13)', 'rgba(231,76,60,.17)'],
+    signalZoneColors: ['rgba(39,174,96,.22)', 'rgba(231,76,60,.22)'],
+    ratioAreaTop: 'rgba(47,128,237,.22)', mcapArea: 'rgba(242,153,74,.15)',
+  },
+  light: {
+    tooltipBg: 'rgba(255,255,255,.98)', tooltipBorder: '#e2e8f0', tooltipText: '#1a2332',
+    axisLabel: '#5a6b80', axisLine: 'rgba(20,40,70,.18)', splitLine: 'rgba(20,40,70,.07)',
+    legendText: '#5a6b80', legendInactive: '#b6c2d2',
+    markLineColor: '#b0bccb', markLineLabel: '#8a99ad', markAreaLabel: '#8a99ad',
+    markPointLabel: '#4a5a70',
+    dzBorder: '#d5dde8', dzFill: 'rgba(47,111,224,.14)', dzHandle: '#2f6fe0', dzText: '#5a6b80',
+    zoneColors: ['rgba(39,174,96,.10)', 'rgba(47,128,237,.06)', 'rgba(231,76,60,.10)'],
+    signalZoneColors: ['rgba(39,174,96,.14)', 'rgba(231,76,60,.14)'],
+    ratioAreaTop: 'rgba(47,128,237,.14)', mcapArea: 'rgba(242,153,74,.12)',
+  },
+};
+let initTheme = 'dark';
+try { initTheme = localStorage.getItem('buf_theme') || 'dark'; } catch (e) {}
+let TC = THEMES[initTheme] || THEMES.dark;
+document.body.dataset.theme = TC === THEMES.dark ? 'dark' : 'light';
+
 // ---------- 图表配置构建（两个页面共用同一套逻辑，功能一致） ----------
 const markPoints = RAW.filter(r => r.type).map(r => ({
   name: r.type,
@@ -195,7 +382,7 @@ const markPoints = RAW.filter(r => r.type).map(r => ({
     color: r.type.indexOf('牛') >= 0 ? '#e74c3c' : (r.type.indexOf('熊') >= 0 ? '#27ae60' : '#909399')
   },
   label: {
-    show: true, fontSize: 10, color: '#555',
+    show: true, fontSize: 10, color: TC.markPointLabel,
     formatter: p => (p.name || '').replace(/\(.*\)/, '')
   }
 }));
@@ -278,11 +465,11 @@ function computeZones(chart) {
 function zoneMarkArea(z) {
   return [
     [{ yAxis: z.bottom[0], name: '底部参考区 ' + z.bottom[0] + '~' + z.bottom[1] + '%' },
-     { yAxis: z.bottom[1], itemStyle: { color: 'rgba(39,174,96,.08)' } }],
+     { yAxis: z.bottom[1], itemStyle: { color: TC.zoneColors[0] } }],
     [{ yAxis: z.mid[0], name: '合理区 ' + z.mid[0] + '~' + z.mid[1] + '%' },
-     { yAxis: z.mid[1], itemStyle: { color: 'rgba(47,128,237,.05)' } }],
+     { yAxis: z.mid[1], itemStyle: { color: TC.zoneColors[1] } }],
     [{ yAxis: z.top[0], name: '顶部参考区 ' + z.top[0] + '~' + z.top[1] + '%' },
-     { yAxis: z.top[1], itemStyle: { color: 'rgba(231,76,60,.08)' } }]
+     { yAxis: z.top[1], itemStyle: { color: TC.zoneColors[2] } }]
   ];
 }
 
@@ -323,6 +510,41 @@ function mcapTrendFor(chart) {
   return out;
 }
 
+function themePatch() {
+  const patch = {
+    legend: { textStyle: { color: TC.legendText }, inactiveColor: TC.legendInactive },
+    tooltip: { backgroundColor: TC.tooltipBg, borderColor: TC.tooltipBorder, textStyle: { color: TC.tooltipText } },
+    xAxis: [{ axisLabel: { color: TC.axisLabel }, axisLine: { lineStyle: { color: TC.axisLine } } }],
+    yAxis: [{ axisLabel: { color: TC.axisLabel }, splitLine: { lineStyle: { color: TC.splitLine } } }],
+    dataZoom: [null, { borderColor: TC.dzBorder, fillerColor: TC.dzFill,
+      handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText } }],
+    series: [{ id: 'ratio', markPoint: { data: markPoints.map(p => ({ ...p, label: { ...p.label, color: TC.markPointLabel } })) } }]
+  };
+  return patch;
+}
+
+function applyTheme(t, save) {
+  TC = THEMES[t] || THEMES.dark;
+  const isDark = TC === THEMES.dark;
+  document.body.dataset.theme = isDark ? 'dark' : 'light';
+  document.getElementById('btnTheme').textContent = isDark ? '☀️' : '🌙';
+  if (save !== false) { try { localStorage.setItem('buf_theme', isDark ? 'dark' : 'light'); } catch (e) {} }
+  const patch = themePatch();
+  chart.setOption(patch);
+  if (analysisInited && analysisChart) analysisChart.setOption(patch);
+  computeSignalZones();  // 用当前主题色重算信号色带
+  const sz = { series: [{ id: 'signalZone', markArea: { data: signalZonesData } }] };
+  chart.setOption(sz);
+  if (analysisInited && analysisChart) analysisChart.setOption(sz);
+  refreshTrendFor(chart);
+  if (analysisInited) {
+    refreshTrendFor(analysisChart, { showDynamic: true, updateInfo: false,
+      yMinFloor: globalThis.analysisYMinFloor, yMaxCeil: globalThis.analysisYMaxCeil });
+  }
+}
+
+function toggleTheme() { applyTheme(TC === THEMES.dark ? 'light' : 'dark'); }
+
 function buildBaseOption(chart, opts) {
   opts = opts || {};
   const showDynamic = opts.showDynamic !== false;   // 动态三区（图表页默认开）
@@ -335,8 +557,8 @@ function buildBaseOption(chart, opts) {
   const yAxisArr = [{
     type: 'value', name: '证券化率 (%)', nameTextStyle: { color: '#8a94a6' },
     min: 0, max: 180,
-    axisLabel: { color: '#666', formatter: '{value}%' },
-    splitLine: { lineStyle: { color: '#f0f2f5' } }
+    axisLabel: { color: TC.axisLabel, formatter: '{value}%' },
+    splitLine: { lineStyle: { color: TC.splitLine } }
   }];
   if (HAS_MCAP) {
     yAxisArr.push({
@@ -359,17 +581,17 @@ function buildBaseOption(chart, opts) {
     lineStyle: { width: 2, color: '#2f80ed' },
     areaStyle: {
       color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [{ offset: 0, color: 'rgba(47,128,237,.18)' }, { offset: 1, color: 'rgba(47,128,237,0)' }] }
+        colorStops: [{ offset: 0, color: TC.ratioAreaTop }, { offset: 1, color: 'rgba(47,128,237,0)' }] }
     },
     markLine: {
       silent: true, symbol: 'none',
-      lineStyle: { color: '#c0c4cc', type: 'dashed' },
-      label: { color: '#909399', fontSize: 11, position: 'insideEndTop' },
+      lineStyle: { color: TC.markLineColor, type: 'dashed' },
+      label: { color: TC.markLineLabel, fontSize: 11, position: 'insideEndTop' },
       data: allLines
     },
     markArea: {
       silent: true,
-      label: { color: '#909399', fontSize: 10, position: 'insideTop' },
+      label: { color: TC.markAreaLabel, fontSize: 10, position: 'insideTop' },
       data: (showDynamic ? zoneMarkArea(initZones) : []).concat(extraAreas)
     },
     markPoint: { data: markPoints.concat(predictMark) }
@@ -381,7 +603,7 @@ function buildBaseOption(chart, opts) {
       data: RAW.map(r => r.mcap),
       showSymbol: false, smooth: true, connectNulls: true, z: 1, silent: true,
       lineStyle: { width: 1.5, color: '#f2994a' },
-      areaStyle: { color: 'rgba(242,153,74,.10)' }
+      areaStyle: { color: TC.mcapArea }
     });
     seriesArr.push({
       id: 'mcapTrend',
@@ -422,15 +644,15 @@ function buildBaseOption(chart, opts) {
       selected: HAS_MCAP
         ? { '证券化率': true, '总市值(万亿)': false, '趋势线': true, '市值趋势线': false, '牛熊信号区间': false }
         : { '证券化率': true, '趋势线': true, '牛熊信号区间': false },
-      textStyle: { color: '#666', fontSize: 12 },
-      inactiveColor: '#c0c4cc',
+      textStyle: { color: TC.legendText, fontSize: 12 },
+      inactiveColor: TC.legendInactive,
       itemWidth: 18, itemHeight: 10
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255,255,255,.97)',
-      borderColor: '#e4e7ed',
-      textStyle: { color: '#333' },
+      backgroundColor: TC.tooltipBg,
+      borderColor: TC.tooltipBorder,
+      textStyle: { color: TC.tooltipText },
       formatter: ps => {
         const r = RAW[ps[0].dataIndex];
         let html = '<b>' + r.date + '</b><br>';
@@ -450,15 +672,15 @@ function buildBaseOption(chart, opts) {
     grid: { left: 66, right: 66, top: 62, bottom: 66 },
     xAxis: {
       type: 'category', data: RAW.map(r => r.date), boundaryGap: false,
-      axisLabel: { color: '#666', fontSize: 11 },
-      axisLine: { lineStyle: { color: '#dcdfe6' } }
+      axisLabel: { color: TC.axisLabel, fontSize: 11 },
+      axisLine: { lineStyle: { color: TC.axisLine } }
     },
     yAxis: [{ ...yAxisArr[0], min: yMin, max: yMax }].concat(yAxisArr.slice(1)),
     dataZoom: [
       { type: 'inside', start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseMove: false },
       { type: 'slider', start: 0, end: 100, height: 22, bottom: 14,
-        borderColor: '#dcdfe6', fillerColor: 'rgba(47,128,237,.12)',
-        handleStyle: { color: '#2f80ed' }, textStyle: { color: '#666', fontSize: 11 } }
+        borderColor: TC.dzBorder, fillerColor: TC.dzFill,
+        handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText, fontSize: 11 } }
     ],
     series: seriesArr
   };
@@ -852,7 +1074,7 @@ function fillAnalysis(fc) {
 
   // 预测逻辑说明
   html += '<p><b>📐 预测逻辑说明</b>（为什么这样划分顶部/底部区域）：</p>';
-  html += '<ul style="margin:4px 0 4px 20px;padding:0;color:#444;font-size:13px;line-height:2">';
+  html += '<ul style="margin:4px 0 4px 20px;padding:0;color:var(--text-2);font-size:13px;line-height:2">';
   html += '<li><b>转折点自动检测（Zigzag）</b>：对全部 ' + N + ' 个数据点扫描，证券化率从峰回落或从谷回升 <b>超过15个百分点</b> 才确认一个转折点，自动识别出 <b>' +
     (peaks.length + troughs.length) + ' 个</b>大周期牛熊转折（' + peaks.length + '峰/' + troughs.length + '谷），不依赖人工标注。波动不足15个百分点的次级震荡被忽略。</li>';
   html += '<li><b>与图表页动态三区的区别</b>：图表页的估值区域是对<b>可视范围内全部数据</b>做对数正态 μ±1σ 划分（随缩放变化，回答"现在处于所选范围的什么相对位置"）；本页预测区是对<b>全历史牛熊转折点</b>做分位统计（固定不变，回答"未来顶/底目标在哪"）。两者方法不同但互补——动态三区看"相对位置"，预测区看"绝对目标"。</li>';
@@ -913,13 +1135,13 @@ function computeSignalZones() {
   for (const [s, e] of merge(botRuns)) {
     signalZonesData.push([
       { xAxis: RAW[s].date, name: '熊市底部信号区 ' + RAW[s].date + '~' + RAW[e].date },
-      { xAxis: RAW[e].date, itemStyle: { color: 'rgba(39,174,96,.13)' } }
+      { xAxis: RAW[e].date, itemStyle: { color: TC.signalZoneColors[0] } }
     ]);
   }
   for (const [s, e] of merge(topRuns)) {
     signalZonesData.push([
       { xAxis: RAW[s].date, name: '牛市顶部信号区 ' + RAW[s].date + '~' + RAW[e].date },
-      { xAxis: RAW[e].date, itemStyle: { color: 'rgba(231,76,60,.13)' } }
+      { xAxis: RAW[e].date, itemStyle: { color: TC.signalZoneColors[1] } }
     ]);
   }
 }
@@ -1059,6 +1281,10 @@ function renderSignal(targetIdx) {
 
 // 默认：检测最新日期（当前时点）——renderSignal 内部会生成控件并绑定事件
 renderSignal(N - 1);
+
+// ---------- 主题初始化 ----------
+document.getElementById('btnTheme').onclick = toggleTheme;
+applyTheme(initTheme, false);
 
 // 初始化可视范围输入框为全范围（此时所有变量已就绪）
 quickAll();
