@@ -54,19 +54,22 @@
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 运行（计算今天并追加到Excel，同步更新HTML）
+# 2. 运行（计算今天，自动回填上次运行以来的缺失交易日，同步更新HTML）
 python main.py
 
 # 3. 指定日期
 python main.py --date 2024-12-31
 
-# 4. 仅重新生成HTML（不调API、不改Excel）
+# 4. 补历史缺口：从指定日期起把 Excel 中缺失的交易日全部补上
+python main.py --backfill-start 2026-08-01
+
+# 5. 仅重新生成HTML（不调API、不改Excel）
 python main.py --html-only
 ```
 
 输出文件：`output/A股证券化率.xlsx` + `output/证券化率.html`
 
-已有数据的日期会自动跳过，不会重复请求API。
+**自动回填**：每次运行都会检查 Excel 最后一行到今天之间的缺失交易日并全部补齐（不再只写当天）；用 `--backfill-start` 可把更早的历史缺口（如半月采样之间的空隙）也一次性补成每日数据。已存在的日期自动跳过，不会重复请求API。
 
 ---
 
@@ -131,7 +134,8 @@ a-stock-indicator/
 ├── core/                      # 基础设施（共享）
 │   ├── cache.py               # JSON缓存 + TTL过期
 │   ├── data_fetcher.py        # HTTP请求（重试+退避+UA轮换+限流+熔断）
-│   ├── base_indicator.py      # 指标基类（继承即自动注册）
+│   ├── trading_calendar.py    # 交易日历（上证指数K线推导，供回填使用）
+│   ├── base_indicator.py      # 指标基类（继承即自动注册，自动回填缺口）
 │   ├── excel_writer.py        # Excel追加/更新
 │   └── html_reporter.py       # HTML可视化（双页面图表+牛熊信号检测）
 ├── indicators/                # 指标实现（自动发现）
@@ -154,6 +158,7 @@ a-stock-indicator/
 - **熔断保护**：连续2次连接失败后该域名熔断120秒
 - **本地缓存**：GDP数据24h缓存，K线数据进程内缓存
 - **幂等写入**：同一日期的数据重复运行只更新不重复
+- **自动回填**：运行一次自动补齐上次运行至今天之间的缺失交易日（基于腾讯K线推导的交易日历，周末/节假日自动跳过）
 - **历史市值锚点校正**：14个真实市值锚点（交易所统计）+ 沪深双指数合成插值，校正IPO扩容高估
 - **GDP point-in-time**：按发布日回溯，历史日期只用当时可得的GDP
 
@@ -226,11 +231,14 @@ class MyIndicator(BaseIndicator):
 ## CLI 命令
 
 ```bash
-# 运行所有指标（今天），计算+更新Excel+同步HTML
+# 运行所有指标（今天），自动回填缺失交易日 + 更新Excel + 同步HTML
 python main.py
 
 # 运行指定日期
 python main.py --date 2024-12-31
+
+# 从指定日期起补全所有缺失交易日（如历史半月采样间的空隙）
+python main.py --backfill-start 2026-08-01
 
 # 只跑某个指标
 python main.py --indicator buffett_indicator
@@ -254,7 +262,7 @@ python main.py --no-html
 
 | 文件 | 说明 |
 |------|------|
-| `output/A股证券化率.xlsx` | 每日追加数据（半月至今日，含牛熊参考日标注） |
+| `output/A股证券化率.xlsx` | 交易日数据（自动回填缺失，含牛熊参考日标注） |
 | `output/证券化率.html` | 交互式可视化（双页面：图表+分析） |
 | `~/.a_stock_indicator/cache/` | GDP缓存、K线缓存（自动创建） |
 

@@ -7,6 +7,7 @@ Usage:
   python main.py --date 2026-01-15  # Run all indicators for a specific date
   python main.py --list             # List all available indicators
   python main.py --indicator buffett_indicator  # Run only a specific indicator
+  python main.py --backfill-start 2026-08-01    # Backfill missing days since 08-01
 """
 
 import argparse
@@ -86,6 +87,14 @@ def main():
         help="List all available indicators and exit.",
     )
     parser.add_argument(
+        "--backfill-start", "-b",
+        type=str,
+        default=None,
+        help="Backfill all missing trading days from this date (YYYY-MM-DD) up to "
+             "--date/today, filling older gaps in the Excel. "
+             "Default: only backfill after the last existing row.",
+    )
+    parser.add_argument(
         "--quiet", "-q",
         action="store_true",
         help="Suppress non-error output.",
@@ -138,6 +147,14 @@ def main():
 
     # Parse date
     target_date = parse_date(args.date) if args.date else date.today()
+    backfill_start = parse_date(args.backfill_start) if args.backfill_start else None
+
+    # Validate: backfill start must not be after the target date
+    if backfill_start and backfill_start > target_date:
+        logger.error(
+            f"--backfill-start {backfill_start} is after target date {target_date}."
+        )
+        sys.exit(1)
 
     # --html-only: skip computation, just regenerate HTML pages
     if args.html_only:
@@ -166,7 +183,7 @@ def main():
     for name, cls in sorted(selected.items()):
         try:
             inst = cls()
-            result = inst.run(target_date)
+            result = inst.run(target_date, backfill_start=backfill_start)
             if result is not None:
                 logger.info(f"  ✓ {name}: saved to {inst.output_file}")
                 success += 1
