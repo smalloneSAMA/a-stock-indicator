@@ -621,6 +621,65 @@ const predictMark = lastTurning ? [{
   }
 }] : [];
 
+// 仍在进行中的那一段：最后一个确认转折之后的反向运行里，当前的极值还差多少才够确认。
+// 峰已确认 → 正在找谷；谷已确认 → 正在找峰。确认门槛与 detectZigzag 同为 12 万亿。
+function getPendingTurning() {
+  const ex = detectZigzag(12, i => RAW[i].mcap);
+  if (!ex.length) return null;
+  const last = ex[ex.length - 1];
+  const i0 = RAW.findIndex(r => r.date === last.date);
+  if (i0 < 0 || i0 >= N - 1) return null;
+  const wantPeak = last.type === 'trough';
+  let best = null;
+  for (let i = i0 + 1; i < N; i++) {
+    const v = RAW[i].mcap;
+    if (v === null || v === undefined) continue;
+    if (!best || (wantPeak ? v > best.v : v < best.v)) best = { i, v, date: RAW[i].date };
+  }
+  if (!best) return null;
+  return {
+    type: wantPeak ? 'peak' : 'trough',
+    date: best.date,
+    mcap: best.v,
+    value: RAW[best.i].value,
+    need: wantPeak ? best.v - 12 : best.v + 12
+  };
+}
+const pendingTurning = getPendingTurning();
+const pendingMark = pendingTurning ? [{
+  name: pendingTurning.type === 'peak' ? '上行中 · 顶部未确认' : '下跌中 · 底部未确认',
+  coord: [pendingTurning.date, pendingTurning.value],
+  value: pendingTurning.value,
+  symbol: 'diamond',
+  symbolSize: 12,
+  symbolOffset: [-7, 0],
+  itemStyle: { color: 'rgba(245,158,11,.15)', borderColor: TC.predictMark, borderWidth: 1.5 },
+  label: {
+    show: true, fontSize: 10, color: TC.predictMark, position: 'left',
+    formatter: () => (pendingTurning.type === 'peak' ? '上行中 · 顶部未确认' : '下跌中 · 底部未确认')
+      + '\\n' + pendingTurning.mcap.toFixed(1) + '万亿，'
+      + (pendingTurning.type === 'peak' ? '回落' : '回升') + '至 '
+      + pendingTurning.need.toFixed(1) + '万亿才确认'
+  }
+}] : [];
+
+// 图例切换/主题切换重发的 markPoint：确认过的牛熊标注 + 最近一次确认转折的预测点 + 在途的那一段。
+// 三处配色不同（历史标注跟随主题，预测点固定橙色），必须合成一个函数统一取，
+// 否则 themePatch 只回填 markPoints 会把预测点覆盖掉。
+// 「当前」标注与在途转折常常是同一行，两者叠在一起会互相压字，此时只保留在途那个。
+function themedMarkPoints() {
+  const pendingDate = pendingTurning ? pendingTurning.date : null;
+  const history = markPoints.filter(p => !(pendingDate && p.name === '当前' && p.coord[0] === pendingDate));
+  return history
+    .map(p => ({ ...p, label: { ...p.label, color: TC.markPointLabel } }))
+    .concat(predictMark.map(p => ({
+      ...p,
+      itemStyle: { ...p.itemStyle, color: TC.predictMark },
+      label: { ...p.label, color: TC.predictMark }
+    })))
+    .concat(pendingMark.map(p => ({ ...p, label: { ...p.label, color: TC.predictMark } })));
+}
+
 function visibleIdx(chart) {
   let opt = null;
   try { opt = chart.getOption(); } catch (e) { opt = null; }
@@ -725,7 +784,7 @@ function themePatch() {
     yAxis: yAxisPatch,
     dataZoom: [null, { borderColor: TC.dzBorder, fillerColor: TC.dzFill,
       handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText } }],
-    series: [{ id: 'ratio', markPoint: { data: markPoints.map(p => ({ ...p, label: { ...p.label, color: TC.markPointLabel } })) } }]
+    series: [{ id: 'ratio', markPoint: { data: themedMarkPoints() } }]
   };
   return patch;
 }
@@ -827,7 +886,7 @@ function buildBaseOption(chart, opts) {
       label: { color: TC.markAreaLabel, fontSize: 10, position: 'insideTop' },
       data: (showDynamic ? zoneMarkArea(initZones) : []).concat(extraAreas)
     },
-    markPoint: { data: markPoints.concat(predictMark) }
+    markPoint: { data: themedMarkPoints() }
   }];
   if (HAS_MCAP) {
     seriesArr.push({
