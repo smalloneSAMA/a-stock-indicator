@@ -489,12 +489,35 @@ function pctOf(arr, p) {
   return s[Math.min(s.length - 1, Math.floor(p * s.length))];
 }
 
-function allValues() {
-  return RAW.map(r => r.value).filter(v => v !== null && v !== undefined);
+function percentileRank(v, arr, wts) {
+  // 默认按点数算；传入 wts 时按时间加权（密集采样段不会被过度加权）
+  if (!wts) return arr.filter(x => x < v).length / arr.length * 100;
+  let below = 0, total = 0;
+  for (let i = 0; i < arr.length; i++) {
+    total += wts[i];
+    if (arr[i] < v) below += wts[i];
+  }
+  return total === 0 ? 0 : below / total * 100;
 }
 
-function percentileRank(v, arr) {
-  return arr.filter(x => x < v).length / arr.length * 100;
+// 每个数据点代表的时间跨度（天）= 到下一条记录的距离；末点沿用前一个跨度。
+// 历史段为半月采样、2026-08 起为逐日采样，直接数点数会让最近的密集段被过度加权，
+// 因此窗口/全历史分位一律用时间加权。
+let _timeWeights = null;
+function timeWeights() {
+  if (_timeWeights) return _timeWeights;
+  const w = new Array(N);
+  for (let i = 0; i < N; i++) {
+    if (i < N - 1) {
+      const d0 = new Date(RAW[i].date).getTime();
+      const d1 = new Date(RAW[i + 1].date).getTime();
+      w[i] = Math.max(1, (d1 - d0) / 86400000);
+    } else {
+      w[i] = i > 0 ? w[i - 1] : 1;
+    }
+  }
+  _timeWeights = w;
+  return w;
 }
 
 function linearSlope(vals) {
@@ -1103,8 +1126,13 @@ function detectZigzag(minMove, getter) {
 
 function computeForecast() {
   const cur = RAW[N - 1].value;
-  const vals = allValues();
-  const rank = percentileRank(cur, vals);
+  const W = timeWeights();
+  const vals = [], vws = [];
+  for (let i = 0; i < N; i++) {
+    const v = RAW[i].value;
+    if (v !== null && v !== undefined) { vals.push(v); vws.push(W[i]); }
+  }
+  const rank = percentileRank(cur, vals, vws);
 
   // Zigzag自动检测全部大周期转折点（阈值15个百分点）
   const extrema = detectZigzag(15);
@@ -1371,9 +1399,11 @@ function slopePerMonthBetween(fromIdx, toIdx) {
 
 function windowStats(fromIdx, toIdx) {
   const data = [];
+  const wts = [];
+  const W = timeWeights();
   for (let i = fromIdx; i <= toIdx; i++) {
     const v = valueOf(i);
-    if (v !== null && v !== undefined) data.push(v);
+    if (v !== null && v !== undefined) { data.push(v); wts.push(W[i]); }
   }
   if (data.length < 4) return null;
   const cur = data[data.length - 1];
@@ -1384,11 +1414,11 @@ function windowStats(fromIdx, toIdx) {
   const topLo = Math.exp(mu + sigma);   // 窗口对数正态顶部区下沿
   // 位置判定：绝对锚点主导（常规底区上沿62 / 常规顶区下沿90，含容差），
   // 窗口分位作“接近”补充：62~75之间仅在窗口内低位(P30以下)才算接近底部；82~90之间仅在窗口内高位(P70以上)才算接近顶部
-  const inBot = (cur <= 62) || (cur <= 75 && percentileRank(cur, data) < 30);
-  const inTop = (cur >= 90) || (cur >= 82 && percentileRank(cur, data) > 70);
+  const inBot = (cur <= 62) || (cur <= 75 && percentileRank(cur, data, wts) < 30);
+  const inTop = (cur >= 90) || (cur >= 82 && percentileRank(cur, data, wts) > 70);
   return {
     cur, n: data.length,
-    pctRank: percentileRank(cur, data),
+    pctRank: percentileRank(cur, data, wts),
     inBot, inTop,
     botHi, topLo,
     slopePerMonth: slopePerMonthBetween(fromIdx, toIdx)
