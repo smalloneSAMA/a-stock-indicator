@@ -300,6 +300,16 @@ __ECHARTS__
     font-family: var(--mono); transition: border-color 0.2s;
   }
   .sig-toolbar input[type="date"]:focus { border-color: var(--accent); }
+  .sig-toolbar .sig-btn {
+    height: 30px; min-width: 30px; padding: 0 9px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--input-bg); color: var(--text-2);
+    font-size: 12px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .sig-toolbar .sig-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .sig-toolbar .sig-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .sig-pos { font-size: 12px; color: var(--text-3); font-family: var(--mono); }
+  .sig-pos .z-bot { color: #22C55E; }
+  .sig-pos .z-top { color: #EF4444; }
   .sig-banner {
     border-radius: 12px; padding: 13px 18px 13px 22px; font-size: 14px; margin: 6px 0 12px; line-height: 1.8;
     border-left-width: 4px; border-left-style: solid;
@@ -436,7 +446,7 @@ __ECHARTS__
     <div id="chart-analysis"></div>
   </div>
   <div class="legend">
-    <b>提示：</b>本图与图表页交互一致（滑块/顶部日期自定义范围选择）。预测区基于<b>全历史统计（固定不随范围变化）</b>：<span class="lg lg-bull">┄</span>常规顶部区(91~108%)　<span class="lg lg-bear">┄</span>常规底部区(40~60%)　<span class="lg lg-bull">┅</span>极端顶参考(2007年164%)，<span class="lg lg-predict">◆</span>预测转折点。缩放时Y轴跟随数据动态变化，但始终保留顶部区上沿与底部区下沿两条线可见。
+    <b>提示：</b>本图与图表页交互一致（滑块/顶部日期自定义范围选择）。预测区基于<b>全历史统计（固定不随范围变化）</b>：<span class="lg lg-bull">┄</span>常规顶部区(<span id="lg-top">--</span>)　<span class="lg lg-bear">┄</span>常规底部区(<span id="lg-bot">--</span>)　<span class="lg lg-bull">┅</span>极端顶参考(<span id="lg-ext">--</span>)，<span class="lg lg-predict">◆</span>预测转折点。缩放时Y轴跟随数据动态变化，但始终保留顶部区上沿与底部区下沿两条线可见。
   </div>
 
   <div class="guide">
@@ -447,7 +457,7 @@ __ECHARTS__
   <div class="guide legend-bottom">
     <h3><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h11v11H2z"/><path d="M6 2.5v11"/></svg>图形解读</h3>
     <p><span class="hl">证券化率</span> = A股全市场总市值 ÷ GDP（巴菲特指标），衡量股票市场相对实体经济的估值水平。</p>
-    <p><span class="hl">三个估值区域</span>（图表页背景色块）：对当前所选时间范围内的证券化率取对数（ln），按对数正态分布的均值±1个标准差划分——合理区(蓝)约覆盖中间68%的时间，其下为底部参考区(绿)、其上为顶部参考区(红)。采用对数变换是因为证券化率呈右偏厚尾分布（2007年164%等极端值会污染直接用均值±σ计算的边界），对数空间乘除对称，边界更稳健。区域随你选择的时间范围动态变化：看长期时反映大周期位置，看短期时反映近期相对位置。</p>
+    <p><span class="hl">三个估值区域</span>（图表页背景色块）：对当前所选时间范围内的证券化率取对数（ln），按对数正态分布的均值±1个标准差划分——合理区(蓝)约覆盖中间68%的时间，其下为底部参考区(绿)、其上为顶部参考区(红)。采用对数变换是因为证券化率呈右偏厚尾分布（2007年峰值等极端值会污染直接用均值±σ计算的边界），对数空间乘除对称，边界更稳健。区域随你选择的时间范围动态变化：看长期时反映大周期位置，看短期时反映近期相对位置。</p>
     <p><span class="hl">趋势线</span>（虚线）：当前可视范围内的线性回归线，红色=证券化率趋势、紫色=总市值趋势。向上表示处于上升通道，向下表示下降通道。</p>
     <p><span class="hl">牛熊标记</span>：红色圆点=历史牛市顶点（6124/5178/3731等），绿色圆点=历史熊市底部（1664/2635等）。曲线进入顶部区并出现红色标记，往往是泡沫期；曲线沉入底部区并出现绿色标记，往往是黄金坑。</p>
     <p><span class="hl">总市值曲线</span>（橙色，右轴）：点击图例叠加显示。短期与证券化率同步（GDP短期近似不变），长期可能背离（GDP增长导致），背离方向反映估值中枢的变化。</p>
@@ -906,6 +916,7 @@ function refreshTrendFor(chart, opts) {
 // ---------- 主图（图表页） ----------
 let zoomSyncing = false;  // 防循环：两图缩放双向同步标志
 let signalZonesData = [];   // 牛熊信号区间（独立series的markArea，两图各自legend控制显隐）
+let signalScores = [];      // 每个数据点的信号得分（供信号页展示该日所处状态）
 computeSignalZones();
 
 function syncZoomTo(src, dst) {
@@ -943,6 +954,17 @@ function findIdx(dateStr, mode) {
   }
   for (let i = N - 1; i >= 0; i--) if (RAW[i].date <= dateStr) return i;
   return 0;
+}
+
+// 取“最近”的记录日：比较前后两条，谁离得近用谁（findIdx 只做单向对齐）
+function nearestIdx(dateStr) {
+  const t = new Date(dateStr).getTime();
+  if (isNaN(t)) return N - 1;
+  const i = findIdx(dateStr, 'from');
+  const j = findIdx(dateStr, 'to');
+  const di = Math.abs(new Date(RAW[i].date).getTime() - t);
+  const dj = Math.abs(new Date(RAW[j].date).getTime() - t);
+  return dj < di ? j : i;
 }
 
 function refreshAllCharts() {
@@ -1096,13 +1118,15 @@ function computeForecast() {
   const botLo = Math.round(pctOf(troughs, 0.30));
   const botHi = Math.round(pctOf(troughs, 0.70));
   const botMed = Math.round(pctOf(troughs, 0.50));
-  // 极端参考线 = 峰最大值 / 谷最小值（2007年164%顶、2005年20%底）
+  // 极端参考线 = 峰最大值 / 谷最小值（由下方 extremeTop/extremeBot 动态计算）
   const extremeTop = peaks.length ? Math.round(Math.max(...peaks)) : null;
   const extremeBot = troughs.length ? Math.round(Math.min(...troughs)) : null;
 
-  // 近12个月趋势（24个半月点）
-  const recent = RAW.slice(-24).map(r => r.value).filter(v => v !== null);
-  const slopePerMonth = linearSlope(recent) * 2;  // 每点=半个月
+  // 近12个月趋势（按真实日期取窗口：逐日回填后「最近24个点」可能只覆盖几周）
+  const cutD = new Date(RAW[N - 1].date);
+  cutD.setFullYear(cutD.getFullYear() - 1);
+  const recentStart = findIdx(cutD.toISOString().slice(0, 10), 'from');
+  const slopePerMonth = slopePerMonthBetween(recentStart, N - 1);
 
   // 历史熊市回撤（峰→下一个谷的跌幅）
   const drops = [];
@@ -1164,9 +1188,9 @@ function initAnalysis() {
   }
 
   // 分析图与图表页交互完全一致；y轴跟随可视数据动态缩放，
-  // 但保证常规顶部区上沿(108%)与常规底部区下沿(40%)两条虚线始终可见
-  globalThis.analysisYMinFloor = fc.normalBotLo - 6;   // 40-6=34
-  globalThis.analysisYMaxCeil = fc.normalTopHi + 6;    // 108+6=114
+  // 但保证常规顶部区上沿与常规底部区下沿两条虚线始终可见
+  globalThis.analysisYMinFloor = fc.normalBotLo - 6;   // 底区下沿再留 6 个百分点余量
+  globalThis.analysisYMaxCeil = fc.normalTopHi + 6;    // 顶区上沿再留 6 个百分点余量
   analysisChart = echarts.init(document.getElementById('chart-analysis'));
   const aOpts = { extraLines, showDynamic: true, updateInfo: false,
     yMinFloor: globalThis.analysisYMinFloor, yMaxCeil: globalThis.analysisYMaxCeil };
@@ -1198,6 +1222,14 @@ function fillAnalysis(fc) {
   document.getElementById('an-bot').innerHTML = normalBotLo + '~' + normalBotHi + '%';
   document.getElementById('an-bot-sub').innerHTML =
     '自动检测 ' + troughs.length + ' 个熊市谷（P30~P70），极值' + (extremeBot !== null ? extremeBot + '%' : '—');
+
+  // 图例里的区间说明同样跟随统计结果，避免写死的旧数字
+  const lgTop = document.getElementById('lg-top');
+  if (lgTop) lgTop.textContent = normalTopLo + '~' + normalTopHi + '%';
+  const lgBot = document.getElementById('lg-bot');
+  if (lgBot) lgBot.textContent = normalBotLo + '~' + normalBotHi + '%';
+  const lgExt = document.getElementById('lg-ext');
+  if (lgExt) lgExt.textContent = extremeTop !== null ? extremeTop + '%' : '—';
 
   // ---- 预测文本 ----
   let html = '';
@@ -1278,8 +1310,10 @@ function computeSignalZones() {
   // 逐点打分（阈值>=4视为信号）
   const botRuns = [], topRuns = [];
   let botRun = null, topRun = null;
+  signalScores = [];
   for (let i = 0; i < N; i++) {
     const sc = scoreSignal(detectSignal(i));
+    signalScores[i] = sc;
     if (sc.botTotal >= 4) { if (botRun === null) botRun = [i, i]; else botRun[1] = i; }
     else if (botRun !== null) { botRuns.push(botRun); botRun = null; }
     if (sc.topTotal >= 4) { if (topRun === null) topRun = [i, i]; else topRun[1] = i; }
@@ -1316,6 +1350,25 @@ function computeSignalZones() {
 fillAnalysis();
 
 // ---------- 牛熊信号检测（多尺度窗口） ----------
+// 注意：数据点间距并不固定（历史为半月采样，2026-08 起自动回填为逐日），
+// 因此斜率一律按真实日期回归，不能用「每点=半个月」的固定倍数换算。
+function slopePerMonthBetween(fromIdx, toIdx) {
+  const xs = [], ys = [];
+  const t0 = new Date(RAW[fromIdx].date).getTime();
+  for (let i = fromIdx; i <= toIdx; i++) {
+    const v = valueOf(i);
+    if (v === null || v === undefined) continue;
+    xs.push((new Date(RAW[i].date).getTime() - t0) / 86400000 / 30.4375);
+    ys.push(v);
+  }
+  const n = xs.length;
+  if (n < 2) return 0;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; sxy += xs[i] * ys[i]; sxx += xs[i] * xs[i]; }
+  const den = n * sxx - sx * sx;
+  return den === 0 ? 0 : (n * sxy - sx * sy) / den;
+}
+
 function windowStats(fromIdx, toIdx) {
   const data = [];
   for (let i = fromIdx; i <= toIdx; i++) {
@@ -1338,7 +1391,7 @@ function windowStats(fromIdx, toIdx) {
     pctRank: percentileRank(cur, data),
     inBot, inTop,
     botHi, topLo,
-    slopePerMonth: linearSlope(data) * 2  // 每点=半个月
+    slopePerMonth: slopePerMonthBetween(fromIdx, toIdx)
   };
 }
 
@@ -1357,15 +1410,47 @@ function detectSignal(targetIdx) {
 function runSignalCheck() {
   const v = document.getElementById('signalDate').value;
   if (v) {
-    const i = findIdx(v, 'from');
-    document.getElementById('signalDate').value = RAW[i].date;
-    renderSignal(i);
+    // 选中的日期可能不是记录日（周末/节假日/半月采样间隙）：吸附到最近的一条有判断的记录
+    const n = nearestIdx(v);
+    const i = hasJudgment(n) ? n : (seekJudgment(n, 1) >= 0 ? seekJudgment(n, 1) : seekJudgment(n, -1));
+    renderSignal(i >= 0 ? i : n);
   } else {
     renderSignal(N - 1);
   }
 }
 
+// 该日是否有判断（三个窗口至少有一个数据量足够）
+function hasJudgment(i) {
+  const w = detectSignal(i);
+  return !!(w[3] || w[5] || w[10]);
+}
+
+// 从 i 起向 dir 方向找最近的一个“有判断”的记录；找不到返回 -1
+function seekJudgment(i, dir) {
+  for (let k = i; k >= 0 && k <= N - 1; k += dir) {
+    if (hasJudgment(k)) return k;
+  }
+  return -1;
+}
+
+// 当前查看的记录下标（供 ◀ / ▶ 前后翻页）
+let signalIdx = N - 1;
+
+function stepSignal(step) {
+  const i = seekJudgment(signalIdx + step, step);
+  if (i < 0) return;
+  renderSignal(i);
+}
+
+function signalZoneLabel(i) {
+  const sc = signalScores[i];
+  if (sc && sc.botTotal >= 4) return '<span class="z-bot">熊市底部信号区</span>';
+  if (sc && sc.topTotal >= 4) return '<span class="z-top">牛市顶部信号区</span>';
+  return '无信号区';
+}
+
 function renderSignal(targetIdx) {
+  signalIdx = targetIdx;
   const target = RAW[targetIdx];
   const w = detectSignal(targetIdx);
   const names = { 3: '3年窗口', 5: '5年窗口', 10: '10年窗口' };
@@ -1435,15 +1520,24 @@ function renderSignal(targetIdx) {
   if (el) {
     el.innerHTML =
       '<div class="sig-toolbar"><label>' + ICON_CAL + '<span>基准日期</span></label>' +
-      '<input type="date" id="signalDate" value="' + target.date + '" /> ' +
-      '<button id="btnSignal" class="qbtn">检测</button>' +
-      '<span style="color:#8a94a6;font-size:12px">（默认最新日期，可输入历史日期验证当时信号）</span></div>' +
+      '<button id="sigPrev" class="sig-btn" title="上一个有记录的交易日">◀</button>' +
+      '<input type="date" id="signalDate" value="' + target.date + '" min="' + RAW[0].date + '" max="' + RAW[N - 1].date + '" />' +
+      '<button id="sigNext" class="sig-btn" title="下一个有记录的交易日">▶</button>' +
+      '<button id="btnSignal" class="sig-btn">检测</button>' +
+      '<span class="sig-pos">第 ' + (targetIdx + 1) + '/' + N + ' 条 · ' + target.date + ' · ' + signalZoneLabel(targetIdx) + '</span>' +
+      '</div>' +
       '<div class="sig-banner ' + bannerCls + '">' + bannerHtml + '</div>' +
       '<div class="sig-cards">' + cards + '</div>' +
       '<p style="margin-top:6px;font-size:12px;color:#555">判定依据：① 各窗口估值位置（绝对锚点62%/90% + 窗口内分位接近） ② 3年趋势方向（底负顶正） ③ 5年趋势衰竭（底部走平 / 顶部涨速衰减）。5项满足越多信号越强。</p>';
     // 重新绑定事件（元素被重建）
     document.getElementById('btnSignal').onclick = runSignalCheck;
     document.getElementById('signalDate').addEventListener('change', runSignalCheck);
+    const prevBtn = document.getElementById('sigPrev');
+    const nextBtn = document.getElementById('sigNext');
+    prevBtn.disabled = seekJudgment(targetIdx - 1, -1) < 0;
+    nextBtn.disabled = seekJudgment(targetIdx + 1, 1) < 0;
+    prevBtn.onclick = () => stepSignal(-1);
+    nextBtn.onclick = () => stepSignal(1);
   }
 }
 
