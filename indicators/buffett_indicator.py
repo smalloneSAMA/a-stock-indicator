@@ -12,7 +12,11 @@ import pandas as pd
 
 from core.base_indicator import BaseIndicator
 from core.excel_writer import save_excel
-from data_sources.market_cap import fetch_total_market_cap, last_trading_day
+from data_sources.market_cap import (
+    fetch_index_close,
+    fetch_total_market_cap,
+    last_trading_day,
+)
 from data_sources.gdp import GDPData
 
 logger = logging.getLogger(__name__)
@@ -35,7 +39,7 @@ class BuffettIndicator(BaseIndicator):
 
     @property
     def columns(self) -> list[str]:
-        return ["日期", "A股总市值(万亿)", "GDP(万亿)", "GDP来源", "证券化率(%)", "类型"]
+        return ["日期", "A股总市值(万亿)", "GDP(万亿)", "GDP来源", "证券化率(%)", "类型", "上证指数"]
 
     def resolve_target_date(self, target_date: date) -> date | None:
         """周末/节假日没有当日行情，对齐到最近交易日。"""
@@ -63,9 +67,13 @@ class BuffettIndicator(BaseIndicator):
         # 3. Compute ratio
         ratio = round(mcap / gdp * 100, 2) if gdp > 0 else 0.0
 
+        # 4. 上证指数收盘点位（仅用于图表叠加，取不到就留空）
+        index_close = fetch_index_close(target_date)
+
         logger.info(
             f"{target_date} | 总市值={mcap:.2f}万亿 | "
             f"GDP={gdp:.2f}万亿({gdp_source}) | 证券化率={ratio:.2f}%"
+            + (f" | 上证指数={index_close:.2f}" if index_close else "")
         )
 
         return {
@@ -75,6 +83,7 @@ class BuffettIndicator(BaseIndicator):
             "GDP来源": gdp_source,
             "证券化率(%)": ratio,
             "类型": "",
+            "上证指数": index_close,
         }
 
     def recompute_gdp(self) -> int:

@@ -363,6 +363,19 @@ def last_trading_day(target_date: date) -> Optional[date]:
     return date.fromisoformat(found) if found else None
 
 
+def fetch_index_close(target_date: date) -> Optional[float]:
+    """
+    上证综指在 target_date（非交易日取之前最近交易日）的收盘点位。
+
+    取不到日线时返回 None（该列留空，不影响证券化率计算）。
+    """
+    klines = _fetch_index_klines("000001", "sh")
+    if not klines:
+        return None
+    _, close = _find_nearest_trading_day(target_date, klines, max_days=20)
+    return close
+
+
 # ── Historical real market-cap anchors (万亿, 沪深A股总市值) ───────
 # 来源：交易所官方统计/权威公开报道。
 # 作用：校正“指数缩放法”未考虑 IPO 扩容导致的系统性高估。

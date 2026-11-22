@@ -479,6 +479,7 @@ __ECHARTS__
 const RAW = __DATA__;
 const N = RAW.length;
 const HAS_MCAP = N > 0 && RAW[0].mcap !== undefined;
+const HAS_INDEX = N > 0 && RAW[0].idx !== undefined;
 
 // ---------- 通用工具 ----------
 function valueOf(i) { return RAW[i].value; }
@@ -545,6 +546,7 @@ const THEMES = {
     trend1: '#F87171', trend2: '#A78BFA',
     bullMark: '#EF4444', bearMark: '#22C55E', predictMark: '#F59E0B',
     signalLine: '#64748B',
+    indexLine: '#CBD5E1',
   },
   light: {
     tooltipBg: 'rgba(255,255,255,.98)', tooltipBorder: '#E2E8F0', tooltipText: '#0F172A',
@@ -560,6 +562,7 @@ const THEMES = {
     trend1: '#DC2626', trend2: '#7C3AED',
     bullMark: '#DC2626', bearMark: '#16A34A', predictMark: '#D97706',
     signalLine: '#94A3B8',
+    indexLine: '#475569',
   },
 };
 
@@ -712,16 +715,32 @@ function mcapTrendFor(chart) {
 }
 
 function themePatch() {
+  const yAxisPatch = [{ axisLabel: { color: TC.axisLabel }, splitLine: { lineStyle: { color: TC.splitLine } } }];
+  if (HAS_MCAP) yAxisPatch.push({ axisLabel: { color: TC.curve2 } });
+  if (HAS_INDEX) yAxisPatch.push({ axisLabel: { color: TC.indexLine }, nameTextStyle: { color: TC.indexLine } });
   const patch = {
     legend: { textStyle: { color: TC.legendText }, inactiveColor: TC.legendInactive },
     tooltip: { backgroundColor: TC.tooltipBg, borderColor: TC.tooltipBorder, textStyle: { color: TC.tooltipText } },
     xAxis: [{ axisLabel: { color: TC.axisLabel }, axisLine: { lineStyle: { color: TC.axisLine } } }],
-    yAxis: [{ axisLabel: { color: TC.axisLabel }, splitLine: { lineStyle: { color: TC.splitLine } } }],
+    yAxis: yAxisPatch,
     dataZoom: [null, { borderColor: TC.dzBorder, fillerColor: TC.dzFill,
       handleStyle: { color: TC.dzHandle }, textStyle: { color: TC.dzText } }],
     series: [{ id: 'ratio', markPoint: { data: markPoints.map(p => ({ ...p, label: { ...p.label, color: TC.markPointLabel } })) } }]
   };
   return patch;
+}
+
+// 图例切换时同步显隐右侧坐标轴：系列关了就没必要留一个空轴；
+// 总市值轴出现时把上证指数轴往外挪一格，避免两根轴叠在一起。
+function bindAxisVisibility(target) {
+  target.on('legendselectchanged', p => {
+    const sel = p.selected || {};
+    const mcapOn = !!(sel['总市值(万亿)'] || sel['市值趋势线']);
+    const upd = [{}];
+    if (HAS_MCAP) upd.push({ show: mcapOn });
+    if (HAS_INDEX) upd.push({ show: !!sel['上证指数'], offset: mcapOn ? 64 : 0 });
+    target.setOption({ yAxis: upd, grid: { right: (HAS_MCAP && mcapOn) ? 126 : 66 } });
+  });
 }
 
 function applyTheme(t, save) {
@@ -764,7 +783,20 @@ function buildBaseOption(chart, opts) {
   if (HAS_MCAP) {
     yAxisArr.push({
       type: 'value', name: '总市值(万亿)', nameTextStyle: { color: '#f2994a' },
+      position: 'right', offset: 0, show: false,
       axisLabel: { color: TC.curve2, formatter: '{value}' },
+      splitLine: { show: false }, axisLine: { show: false }
+    });
+  }
+  let idxAxisIndex = -1;
+  if (HAS_INDEX) {
+    // 上证指数单独一根右轴：单位是点位，与证券化率(%)、总市值(万亿)都不同尺度。
+    // 默认贴着画布右边缘（总市值系列默认关闭）；开启总市值时由 bindAxisVisibility 把它外移。
+    idxAxisIndex = yAxisArr.length;
+    yAxisArr.push({
+      type: 'value', name: '上证指数', nameTextStyle: { color: TC.indexLine },
+      position: 'right', offset: 0,
+      axisLabel: { color: TC.indexLine, formatter: '{value}' },
       splitLine: { show: false }, axisLine: { show: false }
     });
   }
@@ -820,6 +852,15 @@ function buildBaseOption(chart, opts) {
     showSymbol: false, smooth: true, connectNulls: false, z: 2, silent: true,
     lineStyle: { width: 2, type: 'dashed', color: TC.trend1 }
   });
+  if (HAS_INDEX) {
+    seriesArr.push({
+      id: 'index',
+      name: '上证指数', type: 'line', yAxisIndex: idxAxisIndex,
+      data: RAW.map(r => (r.idx === undefined ? null : r.idx)),
+      showSymbol: false, smooth: true, connectNulls: true, z: 1, silent: true,
+      lineStyle: { width: 1.2, color: TC.indexLine, opacity: 0.95 }
+    });
+  }
   // 牛熊信号区间：独立series承载markArea色带，legend点击控制显隐（两图各自独立）
   seriesArr.push({
     id: 'signalZone',
@@ -835,16 +876,20 @@ function buildBaseOption(chart, opts) {
     }
   });
 
+  const legendNames = ['证券化率'];
+  if (HAS_INDEX) legendNames.push('上证指数');
+  legendNames.push('趋势线', '牛熊信号区间');
+  if (HAS_MCAP) legendNames.push('总市值(万亿)', '市值趋势线');
+
   return {
     animation: false,
     legend: {
       top: 4, right: 16, itemGap: 16,
-      data: HAS_MCAP
-        ? ['证券化率', '总市值(万亿)', '趋势线', '市值趋势线', '牛熊信号区间']
-        : ['证券化率', '趋势线', '牛熊信号区间'],
-      selected: HAS_MCAP
-        ? { '证券化率': true, '总市值(万亿)': false, '趋势线': true, '市值趋势线': false, '牛熊信号区间': false }
-        : { '证券化率': true, '趋势线': true, '牛熊信号区间': false },
+      data: legendNames,
+      selected: {
+        '证券化率': true, '上证指数': true, '趋势线': true, '牛熊信号区间': false,
+        '总市值(万亿)': false, '市值趋势线': false
+      },
       textStyle: { color: TC.legendText, fontSize: 12 },
       inactiveColor: TC.legendInactive,
       itemWidth: 18, itemHeight: 10
@@ -861,6 +906,7 @@ function buildBaseOption(chart, opts) {
           let unit = '';
           if (p.seriesName === '证券化率') unit = '%';
           else if (p.seriesName === '总市值(万亿)' || p.seriesName === '市值趋势线') unit = '万亿';
+          else if (p.seriesName === '上证指数') unit = '点';
           return p.marker + ' ' + p.seriesName + ': <b>' + p.value + unit + '</b>';
         }).join('<br>');
         for (const k in r.extra) {
@@ -957,6 +1003,7 @@ function syncZoomTo(src, dst) {
 
 const chart = echarts.init(document.getElementById('chart'));
 chart.setOption(buildBaseOption(chart));
+bindAxisVisibility(chart);
 chart.on('dataZoom', () => {
   refreshTrendFor(chart);
   if (analysisInited) syncZoomTo(chart, analysisChart);
@@ -1223,6 +1270,7 @@ function initAnalysis() {
   const aOpts = { extraLines, showDynamic: true, updateInfo: false,
     yMinFloor: globalThis.analysisYMinFloor, yMaxCeil: globalThis.analysisYMaxCeil };
   analysisChart.setOption(buildBaseOption(analysisChart, aOpts));
+  bindAxisVisibility(analysisChart);
   // 分析图缩放 → 刷新自身 + 同步主图（防循环）
   analysisChart.on('dataZoom', () => {
     refreshTrendFor(analysisChart, aOpts);
@@ -1618,6 +1666,8 @@ def generate_indicator_html(indicator, output_dir=None) -> Path | None:
         return None
     # 检测市值列（用于叠加曲线）
     mcap_col = next((c for c in cols if "市值" in c and c != date_col and c != value_col), None)
+    # 检测上证指数列（用于叠加指数曲线）
+    index_col = next((c for c in cols if "上证指数" in c), None)
 
     records = []
     for _, row in df.iterrows():
@@ -1630,8 +1680,10 @@ def generate_indicator_html(indicator, output_dir=None) -> Path | None:
         }
         if mcap_col and pd.notna(row.get(mcap_col)):
             rec["mcap"] = round(float(row.get(mcap_col)), 2)
+        if index_col and pd.notna(row.get(index_col)):
+            rec["idx"] = round(float(row.get(index_col)), 2)
         for c in cols:
-            if c in (date_col, value_col, type_col):
+            if c in (date_col, value_col, type_col, index_col):
                 continue
             val = row.get(c)
             if pd.notna(val):
