@@ -1521,6 +1521,14 @@ def generate_indicator_html(indicator, output_dir=None) -> Path | None:
     if not records:
         return None
 
+    # 「当前」标记始终落在最新一条数据上：清掉早先手工标注在其他行上的，
+    # 末行没有标注就补一个，避免 Excel 里的固定标注过期。
+    for rec in records[:-1]:
+        if rec["type"] == "当前":
+            rec["type"] = ""
+    if not records[-1]["type"]:
+        records[-1]["type"] = "当前"
+
     html = _PAGE_TEMPLATE.replace("__TITLE__", indicator.name)
     html = html.replace("__ECHARTS__", _ECHARTS_CDN)
     html = html.replace("__DATA__", json.dumps(records, ensure_ascii=False))

@@ -65,6 +65,14 @@ class BaseIndicator(ABC):
         df = pd.DataFrame([result])
         save_excel(self.output_file, df, self.date_col)
 
+    def resolve_target_date(self, target_date: date) -> date | None:
+        """
+        Map a run date to the date actually recorded (e.g. weekend/holiday →
+        last trading day). Return None to skip this run.
+        Default: record the given date as-is.
+        """
+        return target_date
+
     def run(self, target_date: date | None = None,
             backfill_start: date | None = None) -> dict | None:
         """
@@ -84,6 +92,16 @@ class BaseIndicator(ABC):
         Returns the last computed result dict, or None if nothing was written.
         """
         target_date = target_date or date.today()
+
+        # 非交易日（周末/节假日）没有当日行情：对齐到最近交易日，
+        # 避免把上一交易日的收盘市值记到非交易日名下。
+        resolved = self.resolve_target_date(target_date)
+        if resolved is None:
+            logger.warning(f"✗ {self.name}: {target_date} 无法定位交易日，跳过")
+            return None
+        if resolved != target_date:
+            logger.info(f"  {self.name}: {target_date} 非交易日 → 改用最近交易日 {resolved}")
+            target_date = resolved
 
         # Normalize existing dates (load_history returns date objects)
         existing = self.load_history()

@@ -102,6 +102,50 @@ def _parse_exchange_mcaps_from_tencent() -> dict[str, float] | None:
     return result if result else None
 
 
+# 东财 push2 被反爬时会连续返回 RemoteDisconnected。进程内累计连续失败次数，
+# 达到阈值后本次运行不再尝试，避免每个交易所各等一轮「重试 + 退避」白跑。
+_EM_MAX_CONSECUTIVE_FAILS = 2
+_em_consecutive_fails = 0
+
+
+def _eastmoney_index_mcap(secid: str) -> Optional[float]:
+    """东财 push2 取单个指数成分股总市值（元），失败返回 None。"""
+    global _em_consecutive_fails
+    if _em_consecutive_fails >= _EM_MAX_CONSECUTIVE_FAILS:
+        logger.debug(f"Eastmoney 已连续失败 {_em_consecutive_fails} 次，本次运行跳过 {secid}")
+        return None
+
+    url = "https://push2.eastmoney.com/api/qt/stock/get"
+    params = {
+        "secid": secid,
+        "fields": "f20,f21,f44,f45,f46,f116,f117,f118,f119",
+        "invt": "2",
+        "fltt": "2",
+    }
+    headers = {"Referer": "https://quote.eastmoney.com/"}
+
+    try:
+        resp = http_get(url, params=params, headers=headers, timeout=15)
+        data = resp.json().get("data") or {}
+    except Exception as e:
+        _em_consecutive_fails += 1
+        logger.warning(
+            f"Eastmoney HTTP error for {secid} "
+            f"({_em_consecutive_fails}/{_EM_MAX_CONSECUTIVE_FAILS}): {e}"
+        )
+        if _em_consecutive_fails >= _EM_MAX_CONSECUTIVE_FAILS:
+            logger.warning("Eastmoney 连续失败达阈值，本次运行不再使用东财市值源")
+        return None
+
+    _em_consecutive_fails = 0
+    best_val = 0.0
+    for field in ("f20", "f44", "f116", "f117", "f118", "f119", "f21", "f45", "f46"):
+        v = _parse_numeric(data.get(field))
+        if 5e11 < v < 1e16:
+            best_val = max(best_val, v)
+    return best_val or None
+
+
 def _parse_exchange_mcaps_from_eastmoney() -> dict[str, float] | None:
     """
     Fallback: per-exchange market cap from Eastmoney push2.
@@ -114,30 +158,8 @@ def _parse_exchange_mcaps_from_eastmoney() -> dict[str, float] | None:
     result: dict[str, float] = {}
 
     for exchange, secid in index_map.items():
-        url = "https://push2.eastmoney.com/api/qt/stock/get"
-        params = {
-            "secid": secid,
-            "fields": "f20,f21,f44,f45,f46,f116,f117,f118,f119",
-            "invt": "2",
-            "fltt": "2",
-        }
-        headers = {"Referer": "https://quote.eastmoney.com/"}
-
-        try:
-            resp = http_get(url, params=params, headers=headers, timeout=15)
-            data = resp.json().get("data") or {}
-        except Exception as e:
-            logger.warning(f"Eastmoney HTTP error for {exchange}: {e}")
-            continue
-
-        best_val = 0.0
-        for field in ("f20", "f44", "f116", "f117", "f118", "f119", "f21", "f45", "f46"):
-            raw = data.get(field)
-            v = _parse_numeric(raw)
-            if 5e11 < v < 1e16:
-                best_val = max(best_val, v)
-
-        if best_val > 0:
+        best_val = _eastmoney_index_mcap(secid)
+        if best_val:
             result[exchange] = best_val
             logger.debug(f"Eastmoney {exchange}: {best_val/1e12:.2f}万亿")
         else:
@@ -305,17 +327,18 @@ def _fetch_index_klines(index_code: str, prefix: str) -> dict[str, float]:
     return result
 
 
-def _find_nearest_trading_day(target_date: date, klines: dict[str, float]) -> tuple[Optional[str], Optional[float]]:
+def _find_nearest_trading_day(target_date: date, klines: dict[str, float],
+                              max_days: int = 7) -> tuple[Optional[str], Optional[float]]:
     """
     Look up a date in the klines dict. If not found (weekend/holiday),
-    walk backwards up to 7 days to find the nearest trading day.
+    walk backwards up to `max_days` days to find the nearest trading day.
     """
     target_str = target_date.isoformat()
     close = klines.get(target_str)
     if close is not None:
         return target_str, close
 
-    for offset in range(1, 8):
+    for offset in range(1, max_days + 1):
         d = target_date - timedelta(days=offset)
         s = d.isoformat()
         close = klines.get(s)
@@ -323,6 +346,21 @@ def _find_nearest_trading_day(target_date: date, klines: dict[str, float]) -> tu
             return s, close
 
     return None, None
+
+
+def last_trading_day(target_date: date) -> Optional[date]:
+    """
+    <= target_date 的最近交易日（以上证综指日线为准）。
+
+    周末与节假日没有当日行情，运行时会把它对齐到最近交易日，
+    避免把上一交易日的收盘市值记到非交易日名下。
+    指数日线取不到时返回 None（调用方应跳过本次记录）。
+    """
+    klines = _fetch_index_klines("000001", "sh")
+    if not klines:
+        return None
+    found, _ = _find_nearest_trading_day(target_date, klines, max_days=20)
+    return date.fromisoformat(found) if found else None
 
 
 # ── Historical real market-cap anchors (万亿, 沪深A股总市值) ───────

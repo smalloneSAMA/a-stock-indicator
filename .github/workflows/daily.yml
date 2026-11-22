@@ -1,0 +1,45 @@
+name: 每日更新证券化率
+
+on:
+  schedule:
+    # 每个工作日 16:30（北京时间）= 08:30 UTC
+    # 周末/节假日也会触发，但 main.py 会自动对齐到最近交易日并去重，不会产生新行
+    - cron: "30 8 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 计算并更新 Excel/HTML
+        run: python main.py
+
+      - name: 提交数据与页面
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/
+          if git diff --cached --quiet; then
+            echo "本次无新数据（非交易日或已存在），跳过提交"
+            exit 0
+          fi
+          git commit -m "chore: 自动更新 $(TZ=Asia/Shanghai date +%Y-%m-%d) 证券化率数据"
+          git push

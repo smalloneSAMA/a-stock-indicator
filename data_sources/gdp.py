@@ -2,7 +2,7 @@
 Fetch China GDP data with multi-source fallback and linear extrapolation.
 
 Data sources:
-  1. 国家统计局 (NBS) easyquery API — authoritative, public
+  1. 东方财富 datacenter API（转引国家统计局）— 季度累计值，可自动刷新
   2. Hardcoded baseline — fallback with known official values
 
 GDP extrapolation logic (for current year):
@@ -15,8 +15,8 @@ GDP extrapolation logic (for current year):
 Units: 万亿 RMB
 """
 
-import json
 import logging
+import re
 from datetime import date as DateType
 from typing import Optional
 
@@ -25,11 +25,23 @@ from core.data_fetcher import http_get
 
 logger = logging.getLogger(__name__)
 
+_EM_GDP_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
+
+
+def _parse_em_quarter(label: str | None) -> tuple[int | None, int | None]:
+    """解析东财季度标签：「2026年第1-3季度」→ (2026, 3)，「2025年第1季度」→ (2025, 1)。"""
+    if not label:
+        return None, None
+    match = re.search(r"(\d{4})年第1(?:-(\d))?季度", label)
+    if not match:
+        return None, None
+    return int(match.group(1)), int(match.group(2) or 1)
+
 # ── Hardcoded baseline GDP data (万亿 RMB) ──────────────────────────
 # Source: National Bureau of Statistics official releases.
 # Update quarterly as new data is published (usually ~15 days after quarter end).
 _GDP_BASELINE = {
-    "_version": 5,
+    "_version": 6,
     "annual": {
         2000: 10.03,
         2001: 11.09,
@@ -56,8 +68,8 @@ _GDP_BASELINE = {
         2022: 121.02,
         2023: 126.06,
         2024: 134.91,
-        # 2025: estimate ~141 based on ~5% nominal growth.
-        2025: 141.0,
+        # 2025 官方值（统计局 2026-01 发布，第五次经济普查修订口径）
+        2025: 140.19,
     },
     "quarterly": {
         # 2023
@@ -72,7 +84,9 @@ _GDP_BASELINE = {
         "2024Q4": 39.94,
         # 2025
         "2025Q1": 31.87,
-        # "2025Q2": ?,  # usually released mid-July
+        "2025Q2": 34.14,
+        "2025Q3": 35.41,
+        "2025Q4": 38.79,
     },
 }
 
@@ -106,11 +120,11 @@ class GDPData:
         self.quarterly = dict(_GDP_BASELINE["quarterly"])
         self._compute_annual_from_quarterly()
 
-        # 3. Try NBS API to refresh
+        # 3. 从东方财富刷新（失败则继续用内置基线，但会打 warning）
         try:
-            self._try_fetch_nbs()
+            self._try_fetch_eastmoney()
         except Exception as e:
-            logger.info(f"NBS API fetch failed (using baseline): {e}")
+            logger.warning("GDP 刷新异常，改用内置基线：%s", e)
 
         # 4. Save to cache for 24h (versioned)
         self._cache.set("_version", _GDP_BASELINE.get("_version", 1))
@@ -132,68 +146,73 @@ class GDPData:
             if year not in self.annual and len(quarters) == 4:
                 self.annual[year] = round(sum(quarters.values()), 2)
 
-    def _try_fetch_nbs(self):
+    def _try_fetch_eastmoney(self) -> bool:
         """
-        Try to fetch GDP from National Bureau of Statistics easyquery API.
-        Updates self.annual and self.quarterly with fresh data.
+        拉取东方财富（转引国家统计局）的 GDP 并写入本类。
+
+        接口返回「第1-N季度」累计值（亿元），本类内部统一存单季值（万亿），
+        因此同年内逐级相减；「第1-4季度」的累计值即官方全年 GDP。
+        返回是否成功拿到可用数据。
         """
-        # NBS easyquery API — indicator A020101 = GDP
-        # Try annual data first
-        url = "https://data.stats.gov.cn/easyquery/api"
         params = {
-            "m": "QueryData",
-            "dbcode": "fsnd",
-            "rowcode": "zb",
-            "colcode": "sj",
-            "wds": "[]",
-            "dfwds": json.dumps([
-                {"wdcode": "zb", "valuecode": "A020101"},
-                {"wdcode": "reg", "valuecode": "000000"},
-            ]),
+            "reportName": "RPT_ECONOMY_GDP",
+            "columns": "ALL",
+            "pageSize": "100",
+            "sortColumns": "REPORT_DATE",
+            "sortTypes": "-1",
         }
         try:
-            resp = http_get(url, params=params, timeout=15)
-            data = resp.json()
-            records = data.get("returndata", {}).get("datanodes", [])
-            for rec in records:
-                code_info = rec.get("code", "")
-                val = rec.get("data", {}).get("data")
-                if val and "strdata" in val:
-                    try:
-                        year = int(code_info.split(",")[-1].strip().strip('"'))
-                        gdp = float(val["strdata"]) / 10000  # NBS gives 亿元
-                        if gdp > 10:  # sanity check: > 10万亿
-                            self.annual[year] = round(gdp, 2)
-                            logger.info(f"NBS: {year} GDP = {gdp:.2f}万亿")
-                    except (ValueError, IndexError):
-                        continue
+            resp = http_get(_EM_GDP_URL, params=params, timeout=15)
+            payload = resp.json()
         except Exception as e:
-            logger.debug(f"NBS annual fetch: {e}")
+            logger.warning("GDP 刷新失败（东方财富接口不可用）：%s", e)
+            return False
 
-        # Try quarterly data
-        params["dbcode"] = "fsjd"
-        try:
-            resp = http_get(url, params=params, timeout=15)
-            data = resp.json()
-            records = data.get("returndata", {}).get("datanodes", [])
-            for rec in records:
-                code_info = rec.get("code", "")
-                val = rec.get("data", {}).get("data")
-                if val and "strdata" in val:
-                    try:
-                        parts = code_info.split(",")
-                        year_str = parts[-1].strip().strip('"')
-                        # Could be "2024A" or similar
-                        year = int(year_str[:4])
-                        gdp = float(val["strdata"]) / 10000
-                        if gdp > 2:  # sanity: quarterly GDP > 2万亿
-                            quarter = 4  # default, NBS fsjd might aggregate
-                            key = f"{year}Q{quarter}"
-                            self.quarterly[key] = round(gdp, 2)
-                    except (ValueError, IndexError):
-                        continue
-        except Exception as e:
-            logger.debug(f"NBS quarterly fetch: {e}")
+        rows = (payload.get("result") or {}).get("data") or []
+        if not rows:
+            logger.warning("GDP 刷新失败（东方财富接口返回空数据）")
+            return False
+
+        cumulative: dict[int, dict[int, float]] = {}
+        for row in rows:
+            year, quarter = _parse_em_quarter(row.get("TIME"))
+            raw = row.get("DOMESTICL_PRODUCT_BASE")
+            if year is None or quarter is None:
+                continue
+            if not isinstance(raw, (int, float)) or raw <= 0:
+                continue
+            cumulative.setdefault(year, {})[quarter] = raw / 10000  # 亿元 → 万亿
+
+        if not cumulative:
+            logger.warning("GDP 刷新失败（东方财富返回的数据无法解析）")
+            return False
+
+        updated = 0
+        for year, quarters in cumulative.items():
+            previous = 0.0
+            for quarter in sorted(quarters):
+                current = quarters[quarter]
+                single = round(current - previous, 2)
+                previous = current
+                if not 2 < single < 100:  # sanity: 单季 GDP 2~100 万亿
+                    continue
+                self.quarterly[f"{year}Q{quarter}"] = single
+                if quarter == 4 and 10 < current < 300:
+                    self.annual[year] = round(current, 2)
+                updated += 1
+
+        if not updated:
+            logger.warning("GDP 刷新失败（没有通过校验的季度数据）")
+            return False
+
+        latest_year = max(self.annual) if self.annual else None
+        latest_quarter = max(self.quarterly) if self.quarterly else None
+        logger.info(
+            "GDP 已从东方财富刷新：最新年度 %s=%s万亿，最新季度 %s=%s万亿",
+            latest_year, self.annual.get(latest_year) if latest_year else None,
+            latest_quarter, self.quarterly.get(latest_quarter) if latest_quarter else None,
+        )
+        return True
 
     def get_annual(self, year: int) -> Optional[float]:
         """Get known annual GDP for a given year."""
@@ -222,7 +241,8 @@ class GDPData:
         Compute the best GDP available *as of target_date* (point-in-time).
 
         Extrapolation strategy (order of preference, honoring release dates):
-          1. 当年已发布季度外推：Q1+Q2+Q3 → /3×4；Q1+Q2 → ×2；Q1 → ×4
+          1. 当年已发布季度外推：按去年同期占比折算（缺去年同期数据时退回
+             Q1+Q2+Q3 → /3×4；Q1+Q2 → ×2；Q1 → ×4）
           2. 上年全年GDP（当年1月17日发布后）
           3. 去年已发布季度外推（当年1月17日前，全年未发布时）
           4. 更早年份全年GDP（按各自发布时间）
@@ -243,15 +263,37 @@ class GDPData:
             return round(total * 4, 2), f"{year}年Q1 GDP线性外推({total:.1f}×4)"
 
         # 1. 当年已发布季度外推
-        cur_qs = [
-            self.get_quarterly(y, q)
-            for q in (1, 2, 3)
-            if target_date >= self._quarter_release_date(y, q)
-        ]
-        cur_qs = [v for v in cur_qs if v is not None]
-        hit = _extrapolate(cur_qs, y)
-        if hit:
-            return hit
+        #    优先按「去年同期累计值占上年全年」的比例外推：Q1 季节性明显
+        #    （遇上疫情这类异常季更会失真），直接 ×4 的偏差可达 10% 以上。
+        cur_qs: list[float] = []
+        for q in (1, 2, 3):
+            if target_date < self._quarter_release_date(y, q):
+                break
+            value = self.get_quarterly(y, q)
+            if value is None:
+                break
+            cur_qs.append(value)
+
+        if cur_qs:
+            prev_annual = self.get_annual(y - 1)
+            prev_qs: list[float] = []
+            for q in range(1, len(cur_qs) + 1):
+                prev_value = self.get_quarterly(y - 1, q)
+                if prev_value is None:
+                    prev_qs = []
+                    break
+                prev_qs.append(prev_value)
+            prev_total = sum(prev_qs)
+            if prev_annual is not None and prev_total > 0:
+                cur_total = sum(cur_qs)
+                estimate = round(cur_total / prev_total * prev_annual, 2)
+                return estimate, (
+                    f"{y}年前{len(cur_qs)}季GDP按去年同期占比外推"
+                    f"({cur_total:.1f}/{prev_total:.1f}×{prev_annual:.1f})"
+                )
+            hit = _extrapolate(cur_qs, y)
+            if hit:
+                return hit
 
         # 2. 上年全年GDP（y年1月17日起可得）
         if target_date >= DateType(y, 1, 17):

@@ -109,6 +109,11 @@ def main():
         action="store_true",
         help="Skip HTML page generation after computing.",
     )
+    parser.add_argument(
+        "--recompute-gdp",
+        action="store_true",
+        help="Recompute GDP and ratio for all existing rows (no market-cap fetch).",
+    )
 
     args = parser.parse_args()
 
@@ -155,6 +160,23 @@ def main():
             f"--backfill-start {backfill_start} is after target date {target_date}."
         )
         sys.exit(1)
+
+    # --recompute-gdp: 用当前 GDP 数据重算全部历史行（不请求市值）
+    if args.recompute_gdp:
+        for name, cls in sorted(selected.items()):
+            inst = cls()
+            recompute = getattr(inst, "recompute_gdp", None)
+            if recompute is None:
+                logger.warning(f"  - {name}: 不支持 GDP 重算，跳过")
+                continue
+            try:
+                changed = recompute()
+                logger.info(f"  ✓ {name}: 已重算，{changed} 行数值变化")
+            except Exception as e:
+                logger.error(f"  ✗ {name}: {e}", exc_info=True)
+        if args.no_html:
+            return
+        args.html_only = True
 
     # --html-only: skip computation, just regenerate HTML pages
     if args.html_only:
